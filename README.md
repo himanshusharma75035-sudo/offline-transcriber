@@ -40,7 +40,7 @@ everything runs with zero internet. To force-guarantee offline mode:
 
 | Launcher | What it does |
 |----------|--------------|
-| `gui.bat` | The window app — drag files in, pick options, Transcribe |
+| `gui.bat` | The window app — drag files in, pick options, Transcribe. Also has a 🎤 live-mic mode |
 | `transcribe.bat <files>` | Command-line transcription |
 | `live.bat` | Live microphone transcription |
 | `watch.bat <folder>` | Auto-transcribe new files appearing in a folder |

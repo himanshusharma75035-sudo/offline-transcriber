@@ -7,6 +7,7 @@ speaker labels. No internet needed after the one-time model downloads.
 
 import queue
 import threading
+from datetime import datetime
 from pathlib import Path
 
 import customtkinter as ctk
@@ -42,6 +43,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.model_cache = {}
         self.msg_queue = queue.Queue()
         self.last_out_dir = None
+        self.live_stop = None      # threading.Event while live mode runs
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -91,6 +93,21 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                           ("Translate to English", self.translate_var)]:
             ctk.CTkSwitch(side, text=text, variable=var
                           ).pack(anchor="w", padx=20, pady=(6, 0))
+
+        ctk.CTkLabel(side, text="LIVE", text_color="gray50",
+                     font=ctk.CTkFont(size=11, weight="bold")
+                     ).pack(anchor="w", padx=20, pady=(16, 0))
+        self.live_btn = ctk.CTkButton(side, text="🎤  Start live mic",
+                                      height=36, corner_radius=10,
+                                      fg_color="#B3402A",
+                                      hover_color="#93331F",
+                                      command=self._toggle_live)
+        self.live_btn.pack(anchor="w", padx=20, pady=(6, 0), fill="x")
+        ctk.CTkLabel(side, text="Speak, pause — text appears.\n"
+                                "Stop to save the session.",
+                     justify="left", text_color="gray60",
+                     font=ctk.CTkFont(size=11)
+                     ).pack(anchor="w", padx=20, pady=(4, 0))
 
         spacer = ctk.CTkFrame(side, fg_color="transparent")
         spacer.pack(fill="both", expand=True)
@@ -230,19 +247,124 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                                                           text_color=color)
                 elif kind == "done":
                     self.go_btn.configure(state="normal")
+                    self.live_btn.configure(state="normal")
                     self.progress.grid_remove()
+                    if self.last_out_dir:
+                        self.open_btn.configure(state="normal")
+                elif kind == "live_done":
+                    self.live_stop = None
+                    self.live_btn.configure(text="🎤  Start live mic",
+                                            fg_color="#B3402A",
+                                            hover_color="#93331F")
+                    self.go_btn.configure(state="normal")
                     if self.last_out_dir:
                         self.open_btn.configure(state="normal")
         except queue.Empty:
             pass
         self.after(100, self._poll_queue)
 
+    # ---------- live microphone mode ----------------------------------------
+    def _toggle_live(self):
+        if self.live_stop is not None:          # currently listening -> stop
+            self.status_var.set("Stopping live mode...")
+            self.live_stop.set()
+            return
+        self.live_stop = threading.Event()
+        self.live_btn.configure(text="⏹  Stop & save",
+                                fg_color="gray30", hover_color="gray25")
+        self.go_btn.configure(state="disabled")
+        threading.Thread(target=self._live_loop, args=(self.live_stop, {
+            "model": MODELS[self.model_var.get()],
+            "language": LANGUAGES[self.lang_var.get()],
+            "translate": self.translate_var.get(),
+        }), daemon=True).start()
+
+    def _live_loop(self, stop, a):
+        transcript = []
+        try:
+            import numpy as np
+            import sounddevice as sd
+
+            # short utterances gain nothing from batching: use the raw model
+            whisper = self._get_model(a["model"]).model
+
+            rate, block = 16000, 0.25
+            silence_rms, end_silence = 0.01, 0.8
+            max_utterance, min_speech = 12.0, 0.4
+
+            audio_q = queue.Queue()
+
+            def callback(indata, frames, t, status):
+                audio_q.put(indata[:, 0].copy())
+
+            def flush(buf):
+                segments, info = whisper.transcribe(
+                    np.concatenate(buf), language=a["language"],
+                    task="translate" if a["translate"] else "transcribe",
+                    beam_size=2, vad_filter=True)
+                text = " ".join(s.text.strip() for s in segments).strip()
+                if text:
+                    stamp = datetime.now().strftime("%H:%M:%S")
+                    line = f"[{stamp} {info.language}] {text}"
+                    self._log(line)
+                    transcript.append(line)
+
+            self.msg_queue.put(("status",
+                                "🔴 Listening — speak, then pause. "
+                                "Press Stop to finish."))
+            self._log("\n═══ live session started ═══")
+            buf, speech, silence = [], 0.0, 0.0
+            with sd.InputStream(samplerate=rate, channels=1, dtype="float32",
+                                blocksize=int(rate * block),
+                                callback=callback):
+                while not stop.is_set():
+                    try:
+                        chunk = audio_q.get(timeout=0.3)
+                    except queue.Empty:
+                        continue
+                    loud = float(np.sqrt(np.mean(chunk ** 2))) >= silence_rms
+                    if loud:
+                        buf.append(chunk)
+                        speech += block
+                        silence = 0.0
+                    elif buf:
+                        buf.append(chunk)   # keep a little trailing silence
+                        silence += block
+                    if buf and (silence >= end_silence
+                                or len(buf) * block >= max_utterance):
+                        if speech >= min_speech:
+                            flush(buf)
+                        buf, speech, silence = [], 0.0, 0.0
+            if buf and speech >= min_speech:
+                flush(buf)
+
+            if transcript:
+                out = Path(__file__).parent / (
+                    "live_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                    + ".txt")
+                out.write_text("\n".join(transcript) + "\n", encoding="utf-8")
+                self.last_out_dir = str(out.parent)
+                self._log(f"═══ live session saved: {out.name} ═══")
+                self.msg_queue.put(("status", f"Live session saved to {out}"))
+            else:
+                self.msg_queue.put(("status",
+                                    "Live session ended — no speech heard."))
+        except Exception as e:
+            self.msg_queue.put(("status", f"Live mode error: {e}"))
+            self._log(f"live mode error: {e}")
+        finally:
+            self.msg_queue.put(("live_done", None))
+
     # ---------- transcription ----------------------------------------------
     def _start(self):
         if not self.files:
             self.status_var.set("Add some files first — drop them above.")
             return
+        if self.live_stop is not None:
+            self.status_var.set("Stop the live mic first.")
+            return
         self.go_btn.configure(state="disabled")
+        self.live_btn.configure(state="disabled")
         a = {
             "model": MODELS[self.model_var.get()],
             "language": LANGUAGES[self.lang_var.get()],
