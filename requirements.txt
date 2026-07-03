@@ -1,0 +1,19 @@
+# speech-to-text engine (Whisper via CTranslate2, CPU-friendly)
+faster-whisper
+
+# GUI
+customtkinter
+tkinterdnd2
+
+# live microphone mode
+sounddevice
+numpy
+
+# speaker diarization
+speechbrain
+scikit-learn
+
+# AI4Bharat IndicConformer engine (optional but installed by default; large)
+torch
+torchaudio
+transformers

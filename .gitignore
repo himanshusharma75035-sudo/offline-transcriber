@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+.vscode/
+*.log
+
+# transcription outputs that may land in the repo during testing
+live_*.txt
