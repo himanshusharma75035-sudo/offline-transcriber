@@ -149,7 +149,9 @@ def _request(endpoint, fields, wav, key, log=print):
         req = urllib.request.Request(
             API_BASE + endpoint, data=body,
             headers={"Authorization": f"Bearer {key}",
-                     "Content-Type": content_type})
+                     "Content-Type": content_type,
+                     # Groq's edge (Cloudflare) 403s urllib's default UA
+                     "User-Agent": "offline-transcriber/1.0"})
         try:
             with urllib.request.urlopen(req, timeout=300) as r:
                 return json.loads(r.read())
