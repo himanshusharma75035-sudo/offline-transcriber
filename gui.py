@@ -5,6 +5,7 @@ Everything runs locally: Whisper for speech-to-text, SpeechBrain for
 speaker labels. No internet needed after the one-time model downloads.
 """
 
+import json
 import queue
 import threading
 from datetime import datetime
@@ -24,9 +25,14 @@ LANGUAGES = {
 }
 MODELS = {"Fast (small)": "small", "Balanced (medium)": "medium",
           "Best (large-v3)": "large-v3"}
+SETTINGS_FILE = Path(__file__).parent / ".settings.json"
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
+
+
+class JobCancelled(Exception):
+    pass
 
 
 class App(ctk.CTk, TkinterDnD.DnDWrapper):
@@ -46,13 +52,48 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.live_stop = None      # threading.Event while live mode runs
         self.speaker_runs = []     # diarized results of the last job, for
                                    # the "Name speakers" dialog
+        self.job_cancel = threading.Event()
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         self._build_sidebar()
         self._build_main()
+        self._load_settings()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(100, self._poll_queue)
+
+    # ---------- settings persistence -----------------------------------------
+    def _setting_vars(self):
+        return {"model": self.model_var, "language": self.lang_var,
+                "speakers": self.speakers_var, "srt": self.srt_var,
+                "translate": self.translate_var, "notes": self.notes_var,
+                "cloud": self.cloud_var, "docx": self.docx_var,
+                "live_source": self.live_source_var,
+                "theme": self.theme_var}
+
+    def _load_settings(self):
+        try:
+            data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        for name, var in self._setting_vars().items():
+            if name in data:
+                try:
+                    var.set(data[name])
+                except Exception:
+                    pass
+        ctk.set_appearance_mode(self.theme_var.get())
+
+    def _on_close(self):
+        try:
+            SETTINGS_FILE.write_text(json.dumps(
+                {name: var.get()
+                 for name, var in self._setting_vars().items()}),
+                encoding="utf-8")
+        except OSError:
+            pass
+        self.destroy()
 
     # ---------- layout ----------------------------------------------------
     def _build_sidebar(self):
@@ -92,8 +133,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.translate_var = ctk.BooleanVar()
         self.cloud_var = ctk.BooleanVar()
         self.notes_var = ctk.BooleanVar()
+        self.docx_var = ctk.BooleanVar()
         for text, var in [("Speaker labels", self.speakers_var),
                           ("Subtitles (.srt)", self.srt_var),
+                          ("Word (.docx)", self.docx_var),
                           ("Translate to English", self.translate_var),
                           ("📝 Meeting notes", self.notes_var),
                           ("⚡ Cloud boost (free)", self.cloud_var)]:
@@ -109,6 +152,11 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         ctk.CTkLabel(side, text="LIVE", text_color="gray50",
                      font=ctk.CTkFont(size=11, weight="bold")
                      ).pack(anchor="w", padx=20, pady=(16, 0))
+        self.live_source_var = ctk.StringVar(value="Microphone")
+        ctk.CTkOptionMenu(side, variable=self.live_source_var,
+                          values=["Microphone", "Call audio (Teams/Zoom)",
+                                  "Mic + call"], width=200
+                          ).pack(anchor="w", padx=20, pady=(4, 6))
         self.live_btn = ctk.CTkButton(side, text="🎤  Start live mic",
                                       height=36, corner_radius=10,
                                       fg_color="#B3402A",
@@ -166,10 +214,17 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                                     font=ctk.CTkFont(size=15, weight="bold"),
                                     command=self._start)
         self.go_btn.grid(row=0, column=0)
+        self.cancel_btn = ctk.CTkButton(controls, text="Cancel", height=40,
+                                        width=80, corner_radius=10,
+                                        fg_color="gray30",
+                                        hover_color="gray25",
+                                        state="disabled",
+                                        command=self.job_cancel.set)
+        self.cancel_btn.grid(row=0, column=1, padx=(8, 0))
         ctk.CTkButton(controls, text="Clear", height=40, width=80,
                       corner_radius=10, fg_color="gray30",
                       hover_color="gray25", command=self._clear
-                      ).grid(row=0, column=1, padx=(8, 0))
+                      ).grid(row=0, column=4, padx=(8, 0))
         self.name_btn = ctk.CTkButton(controls, text="Name speakers",
                                       height=40, width=130, corner_radius=10,
                                       fg_color="gray30", hover_color="gray25",
@@ -266,6 +321,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                 elif kind == "done":
                     self.go_btn.configure(state="normal")
                     self.live_btn.configure(state="normal")
+                    self.cancel_btn.configure(state="disabled")
                     self.progress.grid_remove()
                     if self.last_out_dir:
                         self.open_btn.configure(state="normal")
@@ -374,17 +430,23 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.live_btn.configure(text="⏹  Stop & save",
                                 fg_color="gray30", hover_color="gray25")
         self.go_btn.configure(state="disabled")
+        source = {"Microphone": "mic", "Call audio (Teams/Zoom)": "call",
+                  "Mic + call": "both"}[self.live_source_var.get()]
         threading.Thread(target=self._live_loop, args=(self.live_stop, {
             "model": MODELS[self.model_var.get()],
             "language": LANGUAGES[self.lang_var.get()],
             "translate": self.translate_var.get(),
+            "source": source,
         }), daemon=True).start()
 
     def _live_loop(self, stop, a):
         transcript = []
+        streams = []
         try:
             import numpy as np
             import sounddevice as sd
+
+            from live import find_loopback_device
 
             # short utterances gain nothing from batching: use the raw model
             whisper = self._get_model(a["model"]).model
@@ -393,12 +455,27 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             silence_rms, end_silence = 0.01, 0.8
             max_utterance, min_speech = 12.0, 0.4
 
+            sources = [("you", None)]
+            if a["source"] in ("call", "both"):
+                loop_dev = find_loopback_device()
+                if loop_dev is None:
+                    self.msg_queue.put((
+                        "status",
+                        "No call-audio device found — enable 'Stereo Mix' in "
+                        "Windows sound settings or install VB-Audio Cable."))
+                    return
+                sources = ([("call", loop_dev)] if a["source"] == "call"
+                           else [("you", None), ("call", loop_dev)])
+            tagged = len(sources) > 1
+
             audio_q = queue.Queue()
 
-            def callback(indata, frames, t, status):
-                audio_q.put(indata[:, 0].copy())
+            def make_callback(tag):
+                def callback(indata, frames, t, status):
+                    audio_q.put((tag, indata[:, 0].copy()))
+                return callback
 
-            def flush(buf):
+            def flush(tag, buf):
                 segments, info = whisper.transcribe(
                     np.concatenate(buf), language=a["language"],
                     task="translate" if a["translate"] else "transcribe",
@@ -407,50 +484,62 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                 text = " ".join(s.text.strip() for s in segments).strip()
                 if text:
                     stamp = datetime.now().strftime("%H:%M:%S")
-                    line = f"[{stamp} {info.language}] {text}"
+                    label = f" {tag}" if tagged else ""
+                    line = f"[{stamp} {info.language}{label}] {text}"
                     self._log(line)
                     transcript.append(line)
 
+            bufs = {tag: [] for tag, _ in sources}
+            speech = {tag: 0.0 for tag, _ in sources}
+            silence = {tag: 0.0 for tag, _ in sources}
+
+            def feed(tag, chunk, drain_all=False):
+                loud = float(np.sqrt(np.mean(chunk ** 2))) >= silence_rms
+                if loud:
+                    bufs[tag].append(chunk)
+                    speech[tag] += block
+                    silence[tag] = 0.0
+                elif bufs[tag]:
+                    bufs[tag].append(chunk)  # keep a little trailing silence
+                    silence[tag] += block
+                if bufs[tag] and (silence[tag] >= end_silence
+                                  or len(bufs[tag]) * block >= max_utterance
+                                  or drain_all):
+                    if speech[tag] >= min_speech:
+                        flush(tag, bufs[tag])
+                    bufs[tag], speech[tag], silence[tag] = [], 0.0, 0.0
+
+            what = " + ".join(tag for tag, _ in sources)
             self.msg_queue.put(("status",
-                                "🔴 Listening — speak, then pause. "
-                                "Press Stop to finish."))
+                                f"🔴 Listening ({what}) — press Stop to "
+                                "finish."))
             self._log("\n═══ live session started ═══")
-            buf, speech, silence = [], 0.0, 0.0
-            with sd.InputStream(samplerate=rate, channels=1, dtype="float32",
-                                blocksize=int(rate * block),
-                                callback=callback):
-                while not stop.is_set():
-                    try:
-                        chunk = audio_q.get(timeout=0.3)
-                    except queue.Empty:
-                        continue
-                    loud = float(np.sqrt(np.mean(chunk ** 2))) >= silence_rms
-                    if loud:
-                        buf.append(chunk)
-                        speech += block
-                        silence = 0.0
-                    elif buf:
-                        buf.append(chunk)   # keep a little trailing silence
-                        silence += block
-                    if buf and (silence >= end_silence
-                                or len(buf) * block >= max_utterance):
-                        if speech >= min_speech:
-                            flush(buf)
-                        buf, speech, silence = [], 0.0, 0.0
+            streams = [sd.InputStream(samplerate=rate, channels=1,
+                                      dtype="float32", device=dev,
+                                      blocksize=int(rate * block),
+                                      callback=make_callback(tag))
+                       for tag, dev in sources]
+            for s in streams:
+                s.start()
+            while not stop.is_set():
+                try:
+                    tag, chunk = audio_q.get(timeout=0.3)
+                except queue.Empty:
+                    continue
+                feed(tag, chunk)
+            for s in streams:
+                s.stop()
             # drain whatever was captured while the last flush was running,
             # so the tail of the final utterance isn't lost on stop
             while True:
                 try:
-                    chunk = audio_q.get_nowait()
+                    tag, chunk = audio_q.get_nowait()
                 except queue.Empty:
                     break
-                loud = float(np.sqrt(np.mean(chunk ** 2))) >= silence_rms
-                if loud or buf:
-                    buf.append(chunk)
-                    if loud:
-                        speech += block
-            if buf and speech >= min_speech:
-                flush(buf)
+                feed(tag, chunk)
+            for tag, _ in sources:
+                feed(tag, np.zeros(int(rate * block), dtype=np.float32),
+                     drain_all=True)
 
             if transcript:
                 out = Path(__file__).parent / (
@@ -467,6 +556,12 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self.msg_queue.put(("status", f"Live mode error: {e}"))
             self._log(f"live mode error: {e}")
         finally:
+            for s in streams:
+                try:
+                    s.stop()
+                    s.close()
+                except Exception:
+                    pass
             self.msg_queue.put(("live_done", None))
 
     # ---------- transcription ----------------------------------------------
@@ -479,10 +574,13 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             return
         self.go_btn.configure(state="disabled")
         self.live_btn.configure(state="disabled")
+        self.job_cancel.clear()
+        self.cancel_btn.configure(state="normal")
         a = {
             "model": MODELS[self.model_var.get()],
             "language": LANGUAGES[self.lang_var.get()],
             "srt": self.srt_var.get(),
+            "docx": self.docx_var.get(),
             "translate": self.translate_var.get(),
             "speakers": self.speakers_var.get(),
             "cloud": self.cloud_var.get(),
@@ -511,6 +609,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         try:
             model = None if a["cloud"] else self._get_model(a["model"])
             for i, f in enumerate(a["files"], 1):
+                if self.job_cancel.is_set():
+                    self.msg_queue.put(("file_status",
+                                        (f, "cancelled", "gray55")))
+                    continue
                 self.msg_queue.put(("file_status", (f, "working…", "#3B8ED0")))
                 self.msg_queue.put(("progress", 0.0))
                 self.msg_queue.put(("status",
@@ -518,10 +620,15 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                 try:
                     self._transcribe_one(model, f, a)
                     self.msg_queue.put(("file_status", (f, "done ✓", "#2CC985")))
+                except JobCancelled:
+                    self.msg_queue.put(("file_status",
+                                        (f, "cancelled", "gray55")))
+                    self._log(f"cancelled during {f.name}")
                 except Exception as e:
                     self.msg_queue.put(("file_status", (f, "error ✗", "#E5544B")))
                     self._log(f"ERROR on {f.name}: {e}")
-            self.msg_queue.put(("status", "Done."))
+            self.msg_queue.put(("status", "Cancelled."
+                                if self.job_cancel.is_set() else "Done."))
         except Exception as e:
             self.msg_queue.put(("status", f"Error: {e}"))
         finally:
@@ -560,6 +667,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                   f"duration {fmt_ts(info.duration)}")
         seg_list = []
         for seg in segments:
+            if self.job_cancel.is_set():
+                raise JobCancelled()
             seg_list.append(seg)
             self._log(f"[{fmt_ts(seg.start)}] {seg.text.strip()}")
             if info.duration:
@@ -605,6 +714,12 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             srt = path.with_suffix(".srt")
             srt.write_text("\n".join(blocks), encoding="utf-8")
             saved.append(srt.name)
+
+        if a["docx"]:
+            from docx_export import write_docx
+            docx_path = write_docx(path.with_suffix(".docx"),
+                                   path.stem, lines)
+            saved.append(docx_path.name)
 
         if a["notes"]:
             self.msg_queue.put(("status",

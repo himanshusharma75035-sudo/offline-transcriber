@@ -13,3 +13,6 @@ groq_api_key.txt
 
 # personal voice fingerprints
 speaker_profiles.json
+
+# per-user GUI preferences
+.settings.json

@@ -1,14 +1,19 @@
-"""Live microphone transcription — fully offline.
+"""Live transcription — microphone, call audio (Teams/Zoom), or both.
 
-Listens to the microphone, waits for you to pause, then transcribes the
-utterance and prints it. Ctrl+C stops and saves the full session transcript.
+Fully offline. Sources:
+  --source mic    your microphone (default)
+  --source call   what you HEAR — captures system audio via a loopback
+                  device (Stereo Mix or VB-Audio Cable), so an online
+                  meeting's other participants are transcribed live
+  --source both   mic + call together; lines are tagged [you] / [call]
+
+Ctrl+C stops and saves the full session transcript.
 
 Usage:
-    live.bat                     # auto-detect language, small model
-    live.bat --language hi       # lock to Hindi
-    live.bat --model medium      # better accuracy, slower response
-    live.bat --list-devices      # show microphones
-    live.bat --input-device 2    # use a specific microphone
+    live.bat                          # dictate with your mic
+    live.bat --source call            # transcribe a Teams/Zoom call live
+    live.bat --source both --language hi
+    live.bat --list-devices           # show capture devices
 """
 
 import argparse
@@ -34,16 +39,46 @@ SILENCE_RMS = 0.01            # below this = silence
 END_SILENCE = 0.8             # seconds of silence that ends an utterance
 MAX_UTTERANCE = 12.0          # force a flush after this many seconds
 MIN_SPEECH = 0.4              # ignore blips shorter than this
+LOOPBACK_KEYWORDS = ("stereo mix", "cable output", "loopback", "what u hear")
 
 
 def rms(block: np.ndarray) -> float:
     return float(np.sqrt(np.mean(block ** 2)))
 
 
+def find_loopback_device():
+    """Find a device that captures system audio (what the speakers play)."""
+    for i, d in enumerate(sd.query_devices()):
+        if (d["max_input_channels"] > 0
+                and any(k in d["name"].lower() for k in LOOPBACK_KEYWORDS)):
+            return i
+    return None
+
+
+def resolve_sources(source, mic_device):
+    """[(tag, device_index_or_None)] for the requested capture mode."""
+    if source == "mic":
+        return [("you", mic_device)]
+    loop = find_loopback_device()
+    if loop is None:
+        print("error: no system-audio capture device found.\n"
+              "Enable 'Stereo Mix' (Sound settings > Recording devices) or\n"
+              "install VB-Audio Cable (vb-audio.com/Cable, free) and set it\n"
+              "as the meeting app's speaker.", file=sys.stderr)
+        sys.exit(1)
+    if source == "call":
+        return [("call", loop)]
+    return [("you", mic_device), ("call", loop)]
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Live offline microphone transcription.",
+        description="Live offline transcription of mic and/or call audio.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--source", default="mic",
+                        choices=["mic", "call", "both"],
+                        help="what to listen to (call = system audio, e.g. "
+                             "an online meeting)")
     parser.add_argument("--model", default="small",
                         help="tiny/base/small are responsive; medium/large-v3 "
                              "are more accurate but lag on CPU")
@@ -60,27 +95,31 @@ def main():
     args = parser.parse_args()
 
     if args.list_devices:
+        loop = find_loopback_device()
         for i, d in enumerate(sd.query_devices()):
             if d["max_input_channels"] > 0:
-                print(f"{i}: {d['name']}")
+                mark = "  <- call capture" if i == loop else ""
+                print(f"{i}: {d['name']}{mark}")
         return
 
+    sources = resolve_sources(args.source, args.input_device)
+    tagged = len(sources) > 1
+
     from faster_whisper import WhisperModel
+
+    from transcribe import get_vocabulary
     print(f"loading model '{args.model}' ...")
     model = WhisperModel(args.model, device="cpu", compute_type="int8")
 
     audio_q = queue.Queue()
-
-    def callback(indata, frames, t, status):
-        if status:
-            print(status, file=sys.stderr)
-        audio_q.put(indata[:, 0].copy())
-
     transcript = []
 
-    from transcribe import get_vocabulary
+    def make_callback(tag):
+        def callback(indata, frames, t, status):
+            audio_q.put((tag, indata[:, 0].copy()))
+        return callback
 
-    def transcribe_chunk(audio: np.ndarray):
+    def transcribe_chunk(tag, audio):
         segments, info = model.transcribe(
             audio, language=args.language,
             task="translate" if args.translate else "transcribe",
@@ -88,42 +127,64 @@ def main():
         text = " ".join(s.text.strip() for s in segments).strip()
         if text:
             stamp = datetime.now().strftime("%H:%M:%S")
-            line = f"[{stamp} {info.language}] {text}"
+            label = f" {tag}" if tagged else ""
+            line = f"[{stamp} {info.language}{label}] {text}"
             print(line, flush=True)
             transcript.append(line)
 
-    print("listening... speak, then pause. Ctrl+C to stop and save.\n")
-    buffer = []          # list of audio blocks in the current utterance
-    speech_seen = 0.0    # seconds of speech in the buffer
-    silence_run = 0.0    # seconds of trailing silence
+    what = " + ".join(tag for tag, _ in sources)
+    print(f"listening ({what})... Ctrl+C to stop and save.\n")
+    bufs = {tag: [] for tag, _ in sources}
+    speech = {tag: 0.0 for tag, _ in sources}
+    silence = {tag: 0.0 for tag, _ in sources}
 
+    def feed(tag, block, drain_all=False):
+        loud = rms(block) >= args.silence_threshold
+        if loud:
+            bufs[tag].append(block)
+            speech[tag] += BLOCK_SECONDS
+            silence[tag] = 0.0
+        elif bufs[tag]:
+            bufs[tag].append(block)   # keep a little trailing silence
+            silence[tag] += BLOCK_SECONDS
+        buffered = len(bufs[tag]) * BLOCK_SECONDS
+        if bufs[tag] and (silence[tag] >= END_SILENCE
+                          or buffered >= MAX_UTTERANCE or drain_all):
+            if speech[tag] >= MIN_SPEECH:
+                transcribe_chunk(tag, np.concatenate(bufs[tag]))
+            bufs[tag], speech[tag], silence[tag] = [], 0.0, 0.0
+
+    streams = [sd.InputStream(samplerate=SAMPLE_RATE, channels=1,
+                              dtype="float32", device=dev,
+                              blocksize=int(SAMPLE_RATE * BLOCK_SECONDS),
+                              callback=make_callback(tag))
+               for tag, dev in sources]
     try:
-        with sd.InputStream(samplerate=SAMPLE_RATE, channels=1,
-                            dtype="float32", device=args.input_device,
-                            blocksize=int(SAMPLE_RATE * BLOCK_SECONDS),
-                            callback=callback):
-            while True:
-                block = audio_q.get()
-                loud = rms(block) >= args.silence_threshold
-                if loud:
-                    buffer.append(block)
-                    speech_seen += BLOCK_SECONDS
-                    silence_run = 0.0
-                elif buffer:
-                    buffer.append(block)   # keep a little trailing silence
-                    silence_run += BLOCK_SECONDS
-
-                buffered = len(buffer) * BLOCK_SECONDS
-                if buffer and (silence_run >= END_SILENCE
-                               or buffered >= MAX_UTTERANCE):
-                    if speech_seen >= MIN_SPEECH:
-                        transcribe_chunk(np.concatenate(buffer))
-                    buffer, speech_seen, silence_run = [], 0.0, 0.0
+        for s in streams:
+            s.start()
+        while True:
+            tag, block = audio_q.get()
+            feed(tag, block)
     except KeyboardInterrupt:
         pass
+    finally:
+        for s in streams:
+            try:
+                s.stop()
+                s.close()
+            except Exception:
+                pass
 
-    if buffer and speech_seen >= MIN_SPEECH:
-        transcribe_chunk(np.concatenate(buffer))
+    # drain whatever is still queued, then flush the open buffers
+    while True:
+        try:
+            tag, block = audio_q.get_nowait()
+        except queue.Empty:
+            break
+        feed(tag, block)
+    for tag, _ in sources:
+        feed(tag, np.zeros(int(SAMPLE_RATE * BLOCK_SECONDS),
+                           dtype=np.float32), drain_all=True)
 
     if transcript:
         out = Path(__file__).parent / (

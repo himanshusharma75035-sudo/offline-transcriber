@@ -157,6 +157,11 @@ def transcribe_file(get_model, audio_path: Path, args):
         srt_path.write_text("\n".join(blocks), encoding="utf-8")
         written.append(srt_path)
 
+    if getattr(args, "docx", False):
+        from docx_export import write_docx
+        written.append(write_docx(stem.with_suffix(".docx"),
+                                  audio_path.stem, lines))
+
     if args.json:
         data = {
             "file": str(audio_path),
@@ -196,6 +201,8 @@ def main():
                              "falls back to the local engine automatically")
     parser.add_argument("--srt", action="store_true",
                         help="also write an .srt subtitle file")
+    parser.add_argument("--docx", action="store_true",
+                        help="also write a formatted Word document")
     parser.add_argument("--json", action="store_true",
                         help="also write a .json file with timestamps")
     parser.add_argument("--speakers", action="store_true",
