@@ -11,6 +11,10 @@ Internet is needed only once, to download the models.
 
 ## Features
 
+- ⚡ **Free cloud boost (optional)** — one switch sends the audio to Groq's
+  free tier instead: ~100× faster than CPU and *more* accurate
+  (Whisper large-v3-turbo). Needs internet + a free API key; falls back
+  to the offline engine automatically
 - 🖥 **Modern GUI** — drag & drop files, dark/light theme, live progress
 - 🗣 **Speaker labels** — "Speaker 1 / Speaker 2" diarization, fully offline
 - 🎤 **Live microphone mode** — speak, pause, watch the text appear
@@ -60,6 +64,28 @@ Examples:
 ```
 
 All flags: add `--help` to any command.
+
+## Fast mode: the free cloud boost
+
+The offline engine is private but CPU-slow. When speed matters and the
+recording is not sensitive, flip on **⚡ Cloud boost** in the GUI (or add
+`--cloud` to `transcribe.bat` / `watch.bat`):
+
+- ~100× faster: an hour of audio in about a minute
+- better accuracy than the local `medium` model
+- completely free (Groq free tier: roughly 8 hours of audio per day,
+  no credit card)
+
+One-time setup: create a free account at
+[console.groq.com](https://console.groq.com), make a key at
+[console.groq.com/keys](https://console.groq.com/keys), and paste it into a
+file named `groq_api_key.txt` next to the scripts. Long recordings are
+split at quiet moments and stitched back automatically. If the key is
+missing or there's no internet, the tool quietly uses the offline engine
+instead — nothing breaks.
+
+**Privacy:** cloud mode uploads that recording to Groq. Keep the switch
+off for anything confidential.
 
 ## Choosing a model (CPU)
 

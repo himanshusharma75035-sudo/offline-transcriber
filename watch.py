@@ -49,6 +49,9 @@ def main():
                         help="label speakers in the transcripts")
     parser.add_argument("--srt", action="store_true",
                         help="also write .srt subtitles")
+    parser.add_argument("--cloud", action="store_true",
+                        help="use the free Groq cloud (faster; needs internet "
+                             "+ free API key; falls back to local)")
     parser.add_argument("--existing", action="store_true",
                         help="also transcribe files already in the folder "
                              "(default: only new arrivals)")
@@ -69,12 +72,21 @@ def main():
     args.no_vad = False
     args.num_speakers = None
 
-    import os
+    cache = {}
 
-    from faster_whisper import WhisperModel
-    print(f"loading model '{args.model}' ...")
-    model = WhisperModel(args.model, device="cpu", compute_type="int8",
-                         cpu_threads=os.cpu_count() or 4)
+    def get_model():
+        if "model" not in cache:
+            import os
+
+            from faster_whisper import WhisperModel
+            print(f"loading model '{args.model}' ...")
+            cache["model"] = WhisperModel(args.model, device="cpu",
+                                          compute_type="int8",
+                                          cpu_threads=os.cpu_count() or 4)
+        return cache["model"]
+
+    if not args.cloud:
+        get_model()
 
     def needs_transcribing(f: Path) -> bool:
         return (f.suffix.lower() in AUDIO_EXTS
@@ -94,7 +106,7 @@ def main():
                     continue        # still being written; check next poll
                 seen.add(f)
                 try:
-                    transcribe_file(model, f, args)
+                    transcribe_file(get_model, f, args)
                 except Exception as e:
                     print(f"error transcribing {f.name}: {e}",
                           file=sys.stderr)

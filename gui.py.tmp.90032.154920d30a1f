@@ -88,34 +88,11 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.speakers_var = ctk.BooleanVar()
         self.srt_var = ctk.BooleanVar()
         self.translate_var = ctk.BooleanVar()
-        self.cloud_var = ctk.BooleanVar()
         for text, var in [("Speaker labels", self.speakers_var),
                           ("Subtitles (.srt)", self.srt_var),
-                          ("Translate to English", self.translate_var),
-                          ("⚡ Cloud boost (free)", self.cloud_var)]:
+                          ("Translate to English", self.translate_var)]:
             ctk.CTkSwitch(side, text=text, variable=var
                           ).pack(anchor="w", padx=20, pady=(6, 0))
-        ctk.CTkLabel(side, text="Cloud: ~100x faster via Groq's free\n"
-                                "tier (needs internet + free key);\n"
-                                "falls back to offline automatically.",
-                     justify="left", text_color="gray60",
-                     font=ctk.CTkFont(size=11)
-                     ).pack(anchor="w", padx=20, pady=(4, 0))
-
-        ctk.CTkLabel(side, text="LIVE", text_color="gray50",
-                     font=ctk.CTkFont(size=11, weight="bold")
-                     ).pack(anchor="w", padx=20, pady=(16, 0))
-        self.live_btn = ctk.CTkButton(side, text="🎤  Start live mic",
-                                      height=36, corner_radius=10,
-                                      fg_color="#B3402A",
-                                      hover_color="#93331F",
-                                      command=self._toggle_live)
-        self.live_btn.pack(anchor="w", padx=20, pady=(6, 0), fill="x")
-        ctk.CTkLabel(side, text="Speak, pause — text appears.\n"
-                                "Stop to save the session.",
-                     justify="left", text_color="gray60",
-                     font=ctk.CTkFont(size=11)
-                     ).pack(anchor="w", padx=20, pady=(4, 0))
 
         spacer = ctk.CTkFrame(side, fg_color="transparent")
         spacer.pack(fill="both", expand=True)
@@ -255,143 +232,25 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                                                           text_color=color)
                 elif kind == "done":
                     self.go_btn.configure(state="normal")
-                    self.live_btn.configure(state="normal")
                     self.progress.grid_remove()
-                    if self.last_out_dir:
-                        self.open_btn.configure(state="normal")
-                elif kind == "live_done":
-                    self.live_stop = None
-                    self.live_btn.configure(text="🎤  Start live mic",
-                                            fg_color="#B3402A",
-                                            hover_color="#93331F")
-                    self.go_btn.configure(state="normal")
                     if self.last_out_dir:
                         self.open_btn.configure(state="normal")
         except queue.Empty:
             pass
         self.after(100, self._poll_queue)
 
-    # ---------- live microphone mode ----------------------------------------
-    def _toggle_live(self):
-        if self.live_stop is not None:          # currently listening -> stop
-            self.status_var.set("Stopping live mode...")
-            self.live_stop.set()
-            return
-        self.live_stop = threading.Event()
-        self.live_btn.configure(text="⏹  Stop & save",
-                                fg_color="gray30", hover_color="gray25")
-        self.go_btn.configure(state="disabled")
-        threading.Thread(target=self._live_loop, args=(self.live_stop, {
-            "model": MODELS[self.model_var.get()],
-            "language": LANGUAGES[self.lang_var.get()],
-            "translate": self.translate_var.get(),
-        }), daemon=True).start()
-
-    def _live_loop(self, stop, a):
-        transcript = []
-        try:
-            import numpy as np
-            import sounddevice as sd
-
-            # short utterances gain nothing from batching: use the raw model
-            whisper = self._get_model(a["model"]).model
-
-            rate, block = 16000, 0.25
-            silence_rms, end_silence = 0.01, 0.8
-            max_utterance, min_speech = 12.0, 0.4
-
-            audio_q = queue.Queue()
-
-            def callback(indata, frames, t, status):
-                audio_q.put(indata[:, 0].copy())
-
-            def flush(buf):
-                segments, info = whisper.transcribe(
-                    np.concatenate(buf), language=a["language"],
-                    task="translate" if a["translate"] else "transcribe",
-                    beam_size=2, vad_filter=True)
-                text = " ".join(s.text.strip() for s in segments).strip()
-                if text:
-                    stamp = datetime.now().strftime("%H:%M:%S")
-                    line = f"[{stamp} {info.language}] {text}"
-                    self._log(line)
-                    transcript.append(line)
-
-            self.msg_queue.put(("status",
-                                "🔴 Listening — speak, then pause. "
-                                "Press Stop to finish."))
-            self._log("\n═══ live session started ═══")
-            buf, speech, silence = [], 0.0, 0.0
-            with sd.InputStream(samplerate=rate, channels=1, dtype="float32",
-                                blocksize=int(rate * block),
-                                callback=callback):
-                while not stop.is_set():
-                    try:
-                        chunk = audio_q.get(timeout=0.3)
-                    except queue.Empty:
-                        continue
-                    loud = float(np.sqrt(np.mean(chunk ** 2))) >= silence_rms
-                    if loud:
-                        buf.append(chunk)
-                        speech += block
-                        silence = 0.0
-                    elif buf:
-                        buf.append(chunk)   # keep a little trailing silence
-                        silence += block
-                    if buf and (silence >= end_silence
-                                or len(buf) * block >= max_utterance):
-                        if speech >= min_speech:
-                            flush(buf)
-                        buf, speech, silence = [], 0.0, 0.0
-            # drain whatever was captured while the last flush was running,
-            # so the tail of the final utterance isn't lost on stop
-            while True:
-                try:
-                    chunk = audio_q.get_nowait()
-                except queue.Empty:
-                    break
-                loud = float(np.sqrt(np.mean(chunk ** 2))) >= silence_rms
-                if loud or buf:
-                    buf.append(chunk)
-                    if loud:
-                        speech += block
-            if buf and speech >= min_speech:
-                flush(buf)
-
-            if transcript:
-                out = Path(__file__).parent / (
-                    "live_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                    + ".txt")
-                out.write_text("\n".join(transcript) + "\n", encoding="utf-8")
-                self.last_out_dir = str(out.parent)
-                self._log(f"═══ live session saved: {out.name} ═══")
-                self.msg_queue.put(("status", f"Live session saved to {out}"))
-            else:
-                self.msg_queue.put(("status",
-                                    "Live session ended — no speech heard."))
-        except Exception as e:
-            self.msg_queue.put(("status", f"Live mode error: {e}"))
-            self._log(f"live mode error: {e}")
-        finally:
-            self.msg_queue.put(("live_done", None))
-
     # ---------- transcription ----------------------------------------------
     def _start(self):
         if not self.files:
             self.status_var.set("Add some files first — drop them above.")
             return
-        if self.live_stop is not None:
-            self.status_var.set("Stop the live mic first.")
-            return
         self.go_btn.configure(state="disabled")
-        self.live_btn.configure(state="disabled")
         a = {
             "model": MODELS[self.model_var.get()],
             "language": LANGUAGES[self.lang_var.get()],
             "srt": self.srt_var.get(),
             "translate": self.translate_var.get(),
             "speakers": self.speakers_var.get(),
-            "cloud": self.cloud_var.get(),
             "files": list(self.files),
         }
         threading.Thread(target=self._run_job, args=(a,), daemon=True).start()
@@ -413,10 +272,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def _run_job(self, a):
         try:
-            model = None if a["cloud"] else self._get_model(a["model"])
+            model = self._get_model(a["model"])
             for i, f in enumerate(a["files"], 1):
                 self.msg_queue.put(("file_status", (f, "working…", "#3B8ED0")))
-                self.msg_queue.put(("progress", 0.0))
                 self.msg_queue.put(("status",
                                     f"Transcribing {f.name} ({i}/{len(a['files'])})..."))
                 try:
@@ -432,31 +290,12 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self.msg_queue.put(("done", None))
 
     def _transcribe_one(self, model, path: Path, a):
+        segments, info = model.transcribe(
+            str(path), language=a["language"],
+            task="translate" if a["translate"] else "transcribe",
+            beam_size=5, batch_size=8,
+            word_timestamps=a["speakers"])
         self._log(f"\n═══ {path.name} ═══")
-        segments = None
-        if a["cloud"]:
-            import cloud
-            try:
-                self.msg_queue.put(("status",
-                                    f"Uploading {path.name} to Groq "
-                                    "(free cloud)..."))
-                segments, info = cloud.transcribe(
-                    path, language=a["language"], translate=a["translate"],
-                    want_words=a["speakers"], log=self._log)
-            except cloud.CloudUnavailable as e:
-                self._log(f"cloud unavailable — using the local engine.\n"
-                          f"({e})")
-                self.msg_queue.put(("status",
-                                    f"Cloud unavailable — transcribing "
-                                    f"{path.name} offline instead..."))
-        if segments is None:
-            if model is None:
-                model = self._get_model(a["model"])
-            segments, info = model.transcribe(
-                str(path), language=a["language"],
-                task="translate" if a["translate"] else "transcribe",
-                beam_size=5, batch_size=8,
-                word_timestamps=a["speakers"])
         self._log(f"language: {info.language} "
                   f"({info.language_probability:.0%}), "
                   f"duration {fmt_ts(info.duration)}")

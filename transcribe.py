@@ -52,28 +52,39 @@ def collect_inputs(paths):
     return files
 
 
-def transcribe_file(model, audio_path: Path, args):
+def transcribe_file(get_model, audio_path: Path, args):
     print(f"\n=== {audio_path.name} ===")
     t0 = time.time()
 
     want_speakers = args.speakers or args.num_speakers
-    kwargs = dict(
-        language=args.language,
-        task="translate" if args.translate else "transcribe",
-        beam_size=args.beam_size,
-        word_timestamps=bool(want_speakers),
-    )
-    if args.no_batch or args.no_vad:
-        segments, info = model.transcribe(
-            str(audio_path), vad_filter=not args.no_vad,
-            vad_parameters={"min_silence_duration_ms": 500}, **kwargs)
-    else:
-        # batched pipeline runs several VAD-cut chunks through the model at
-        # once — several times faster on multi-core CPU for long recordings
-        from faster_whisper import BatchedInferencePipeline
-        pipeline = BatchedInferencePipeline(model=model)
-        segments, info = pipeline.transcribe(
-            str(audio_path), batch_size=args.batch_size, **kwargs)
+    segments = None
+    if args.cloud:
+        import cloud
+        try:
+            segments, info = cloud.transcribe(
+                audio_path, language=args.language,
+                translate=args.translate, want_words=bool(want_speakers))
+        except cloud.CloudUnavailable as e:
+            print(f"cloud unavailable — using the local engine.\n({e})\n")
+    if segments is None:
+        model = get_model()
+        kwargs = dict(
+            language=args.language,
+            task="translate" if args.translate else "transcribe",
+            beam_size=args.beam_size,
+            word_timestamps=bool(want_speakers),
+        )
+        if args.no_batch or args.no_vad:
+            segments, info = model.transcribe(
+                str(audio_path), vad_filter=not args.no_vad,
+                vad_parameters={"min_silence_duration_ms": 500}, **kwargs)
+        else:
+            # batched pipeline runs several VAD-cut chunks through the model
+            # at once — much faster on multi-core CPU for long recordings
+            from faster_whisper import BatchedInferencePipeline
+            pipeline = BatchedInferencePipeline(model=model)
+            segments, info = pipeline.transcribe(
+                str(audio_path), batch_size=args.batch_size, **kwargs)
 
     print(f"detected language: {info.language} "
           f"(probability {info.language_probability:.0%}), "
@@ -157,6 +168,11 @@ def main():
     parser.add_argument("--translate", action="store_true",
                         help="translate the speech to English instead of "
                              "transcribing in the original language")
+    parser.add_argument("--cloud", action="store_true",
+                        help="use the free Groq cloud: ~100x faster and more "
+                             "accurate, needs internet + a free API key "
+                             "(instructions are printed if it's missing); "
+                             "falls back to the local engine automatically")
     parser.add_argument("--srt", action="store_true",
                         help="also write an .srt subtitle file")
     parser.add_argument("--json", action="store_true",
@@ -186,17 +202,27 @@ def main():
         print("error: no audio files found", file=sys.stderr)
         sys.exit(1)
 
-    from faster_whisper import WhisperModel  # deferred: slow import
+    cache = {}
 
-    compute = "int8" if args.device == "cpu" else "float16"
-    print(f"loading model '{args.model}' on {args.device} ({compute}) ...")
-    print("(first use of a model downloads it once; after that it's fully offline)")
-    model = WhisperModel(args.model, device=args.device, compute_type=compute,
-                         cpu_threads=os.cpu_count() or 4)
+    def get_model():
+        if "model" not in cache:
+            from faster_whisper import WhisperModel  # deferred: slow import
+            compute = "int8" if args.device == "cpu" else "float16"
+            print(f"loading model '{args.model}' on {args.device} "
+                  f"({compute}) ...")
+            print("(first use of a model downloads it once; after that it's "
+                  "fully offline)")
+            cache["model"] = WhisperModel(args.model, device=args.device,
+                                          compute_type=compute,
+                                          cpu_threads=os.cpu_count() or 4)
+        return cache["model"]
+
+    if not args.cloud:
+        get_model()      # load upfront so the wait happens before file 1
 
     for f in files:
         try:
-            transcribe_file(model, f, args)
+            transcribe_file(get_model, f, args)
         except Exception as e:
             print(f"error transcribing {f}: {e}", file=sys.stderr)
 
