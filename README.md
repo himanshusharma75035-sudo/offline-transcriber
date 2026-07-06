@@ -15,16 +15,27 @@ Internet is needed only once, to download the models.
   free tier instead: ~100× faster than CPU and *more* accurate
   (Whisper large-v3-turbo). Needs internet + a free API key; falls back
   to the offline engine automatically
-- 🖥 **Modern GUI** — drag & drop files, dark/light theme, live progress
-- 🗣 **Speaker labels** — "Speaker 1 / Speaker 2" diarization, fully offline
-- 🎤 **Live microphone mode** — speak, pause, watch the text appear
+- 🖥 **Modern GUI** — drag & drop files, dark/light theme, live progress,
+  Cancel button, remembers your settings
+- 🗣 **Speaker labels with voice memory** — diarization splits "who said
+  what"; name a speaker once and future meetings label them by name
+  automatically (voice fingerprints stay on your machine)
+- 📝 **Meeting notes** — summary, key points and action items in seconds
+  via Groq's free LLMs (or a local Ollama model, fully offline)
+- 🎤 **Live modes** — dictate with the mic, or transcribe a **Teams/Zoom
+  call live** by capturing system audio; "Mic + call" tags lines
+  [you]/[call]
+- 📖 **Custom vocabulary** — put your company terms and names in
+  `vocabulary.txt` so they're spelled right
 - 📂 **Watch folder** — auto-transcribe recordings as they land in a folder
 - 🖱 **Explorer integration** — right-click any audio/video → Transcribe
-- 📝 **Meeting notes** — offline summary + action items via a local LLM
+- 🔍 **Search** — grep across all your transcripts (`search.bat`)
 - 🌐 **Translate** — any supported language → English text
-- 💬 Subtitles (`.srt`), timestamps (`.json`), plain text (`.txt`)
+- 💬 Outputs: `.txt`, subtitles (`.srt`), Word (`.docx`) with bold speaker
+  names, timestamps (`.json`), notes (`.md`)
 - 🇮🇳 Optional **AI4Bharat IndicConformer** engine for the 22 official Indian
   languages
+- 📦 `build_exe.ps1` packages a standalone .exe for PCs without Python
 
 ## Setup (Windows)
 
@@ -44,13 +55,15 @@ everything runs with zero internet. To force-guarantee offline mode:
 
 | Launcher | What it does |
 |----------|--------------|
-| `gui.bat` | The window app — drag files in, pick options, Transcribe. Also has a 🎤 live-mic mode |
-| `transcribe.bat <files>` | Command-line transcription |
-| `live.bat` | Live microphone transcription |
+| `gui.bat` | The window app — files, live mic/call, speaker naming, everything |
+| `transcribe.bat <files>` | Command-line transcription (`--speakers --cloud --docx ...`) |
+| `live.bat` | Live transcription: `--source mic` / `call` / `both` |
 | `watch.bat <folder>` | Auto-transcribe new files appearing in a folder |
 | `summarize.bat <txt>` | Meeting notes + action items from a transcript |
+| `search.bat "text" [folder]` | Search across all transcripts |
 | `indic.bat <files> --language hi` | AI4Bharat IndicConformer engine |
 | `install_context_menu.ps1` | Add right-click → "Transcribe (offline)" |
+| `build_exe.ps1` | Build a standalone .exe to share with teammates |
 
 Examples:
 
@@ -110,11 +123,26 @@ have one.
   run `indic.bat` once and follow the printed one-time unlock steps
   (free account + token).
 
-## Meeting notes (summarize.bat)
+## Meeting notes
 
-Install [Ollama](https://ollama.com) (free, open source), pull a small
-model once (`ollama pull llama3.2:3b`), and `summarize.bat` turns any
-transcript into a summary, key points and action items — locally.
+With a Groq key present, notes (summary / key points / action items)
+generate in seconds — turn on **📝 Meeting notes** in the GUI or run
+`summarize.bat "meeting.txt"`. Without a key, it falls back to a local
+[Ollama](https://ollama.com) model, fully offline.
+
+## Who said what — with real names
+
+Turn on **Speaker labels**, transcribe a meeting, then click
+**Name speakers** and type who Speaker 1/2/… were. Their voice
+fingerprints are stored locally (`speaker_profiles.json`) and future
+meetings label them by name automatically.
+
+## Transcribing a live Teams/Zoom call
+
+In the GUI's LIVE section pick **Call audio (Teams/Zoom)** (captures what
+you hear through a loopback device — Stereo Mix or the free
+[VB-Audio Cable](https://vb-audio.com/Cable/)) or **Mic + call** to also
+capture your own voice, tagged `[you]` / `[call]`. Then Start.
 
 ## Notes
 
