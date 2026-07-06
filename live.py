@@ -78,11 +78,13 @@ def main():
 
     transcript = []
 
+    from transcribe import get_vocabulary
+
     def transcribe_chunk(audio: np.ndarray):
         segments, info = model.transcribe(
             audio, language=args.language,
             task="translate" if args.translate else "transcribe",
-            beam_size=2, vad_filter=True)
+            beam_size=2, vad_filter=True, hotwords=get_vocabulary())
         text = " ".join(s.text.strip() for s in segments).strip()
         if text:
             stamp = datetime.now().strftime("%H:%M:%S")

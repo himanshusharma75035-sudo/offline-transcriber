@@ -10,3 +10,6 @@ live_*.txt
 
 # secrets — never commit the API key
 groq_api_key.txt
+
+# personal voice fingerprints
+speaker_profiles.json

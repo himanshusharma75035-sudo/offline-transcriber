@@ -52,8 +52,9 @@ def _get_classifier():
 def build_timeline(audio: np.ndarray, num_speakers=None):
     """Cluster sliding windows into speakers.
 
-    Returns (times, labels): center time of each speech window and its
-    1-based speaker number (first voice heard = Speaker 1).
+    Returns (times, labels, centroids): center time of each speech window,
+    its 1-based speaker number (first voice heard = Speaker 1), and
+    {speaker_number: mean embedding} for voice-memory matching.
     """
     import torch
     from sklearn.cluster import AgglomerativeClustering
@@ -69,9 +70,13 @@ def build_timeline(audio: np.ndarray, num_speakers=None):
             chunks.append(chunk)
             times.append(start / SAMPLE_RATE + WINDOW_SECONDS / 2)
     if not chunks:
-        return [], []
+        return [], [], {}
     if len(chunks) == 1:
-        return times, [1]
+        with torch.no_grad():
+            emb = (_get_classifier()
+                   .encode_batch(torch.from_numpy(np.stack(chunks)).float())
+                   .squeeze(1).cpu().numpy()[0])
+        return times, [1], {1: emb / (np.linalg.norm(emb) or 1.0)}
 
     classifier = _get_classifier()
     embs = []
@@ -116,19 +121,23 @@ def build_timeline(audio: np.ndarray, num_speakers=None):
     for lab in raw:
         if lab not in order:
             order[lab] = len(order) + 1
-    return times, [order[lab] for lab in raw]
+    labels = [order[lab] for lab in raw]
+    centroids = {num: X[np.asarray(labels) == num].mean(axis=0)
+                 for num in set(labels)}
+    return times, labels, centroids
 
 
 def diarize_words(audio: np.ndarray, words, num_speakers=None):
     """Group transcribed words into speaker turns.
 
     words: [(start_s, end_s, text)] from Whisper word timestamps.
-    Returns [(speaker, turn_start_s, turn_end_s, text)], and the number of
-    speakers found.
+    Returns ([(speaker, turn_start_s, turn_end_s, text)], speaker_count,
+    {speaker: voice embedding}) — the embeddings feed voice memory
+    (voices.py) so known people can be named automatically.
     """
-    times, labels = build_timeline(audio, num_speakers)
+    times, labels, centroids = build_timeline(audio, num_speakers)
     if not times:
-        return [], 0
+        return [], 0, {}
     times_arr = np.asarray(times)
 
     def speaker_at(t):
@@ -142,4 +151,5 @@ def diarize_words(audio: np.ndarray, words, num_speakers=None):
             turns[-1] = (spk, prev[1], end, prev[3] + text)
         else:
             turns.append((spk, start, end, text))
-    return [(s, st, en, tx.strip()) for s, st, en, tx in turns], max(labels)
+    return ([(s, st, en, tx.strip()) for s, st, en, tx in turns],
+            max(labels), centroids)

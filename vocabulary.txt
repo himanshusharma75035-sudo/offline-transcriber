@@ -1,0 +1,20 @@
+# Custom vocabulary — one term per line. These words/names are hinted to
+# the speech engines so they get spelled correctly in transcripts.
+# Edit freely: add your company terms, product names, people's names.
+# Lines starting with # are ignored.
+Eko
+UTR
+CSP
+DMT
+IMPS
+NEFT
+RTGS
+UPI
+AePS
+reconciliation
+money transfer
+inter-fund transfer
+bank statement
+settlement
+Himanshu
+Tania

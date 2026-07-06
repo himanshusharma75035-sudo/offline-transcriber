@@ -29,6 +29,19 @@ AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".mp4", ".aac", ".flac", ".ogg", ".opus",
               ".wma", ".webm", ".mkv", ".avi", ".mov", ".amr", ".3gp"}
 
 
+def get_vocabulary():
+    """Domain terms from vocabulary.txt, hinted to the engines so company
+    jargon and names get spelled correctly. Returns None if the file is
+    missing or empty."""
+    vocab_file = Path(__file__).parent / "vocabulary.txt"
+    if not vocab_file.is_file():
+        return None
+    terms = [line.strip() for line in
+             vocab_file.read_text(encoding="utf-8").splitlines()
+             if line.strip() and not line.strip().startswith("#")]
+    return ", ".join(terms)[:800] or None    # keep well under prompt limits
+
+
 def fmt_ts(seconds: float, srt: bool = False) -> str:
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
@@ -63,7 +76,8 @@ def transcribe_file(get_model, audio_path: Path, args):
         try:
             segments, info = cloud.transcribe(
                 audio_path, language=args.language,
-                translate=args.translate, want_words=bool(want_speakers))
+                translate=args.translate, want_words=bool(want_speakers),
+                prompt=get_vocabulary())
         except cloud.CloudUnavailable as e:
             print(f"cloud unavailable — using the local engine.\n({e})\n")
     if segments is None:
@@ -73,6 +87,7 @@ def transcribe_file(get_model, audio_path: Path, args):
             task="translate" if args.translate else "transcribe",
             beam_size=args.beam_size,
             word_timestamps=bool(want_speakers),
+            hotwords=get_vocabulary(),
         )
         if args.no_batch or args.no_vad:
             segments, info = model.transcribe(
@@ -106,14 +121,20 @@ def transcribe_file(get_model, audio_path: Path, args):
         from faster_whisper.audio import decode_audio
 
         from diarize import diarize_words
+        from voices import display_name, match_speakers
         print("labelling speakers...")
         words = [(w.start, w.end, w.word)
                  for s in seg_list for w in (s.words or [])]
         audio = decode_audio(str(audio_path), sampling_rate=16000)
-        turns, n = diarize_words(audio, words, args.num_speakers)
+        turns, n, centroids = diarize_words(audio, words, args.num_speakers)
         if turns:
             print(f"speakers found: {n}")
-            lines = [(st, en, f"Speaker {spk}: {tx}")
+            names = match_speakers(centroids)
+            if names:
+                print("recognized voices: " + ", ".join(
+                    f"Speaker {num} = {name}" for num, name in
+                    sorted(names.items())))
+            lines = [(st, en, f"{display_name(spk, names)}: {tx}")
                      for spk, st, en, tx in turns]
             for _, _, tx in lines:
                 print(tx)

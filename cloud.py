@@ -184,7 +184,7 @@ def _request(endpoint, fields, wav, key, log=print):
 
 
 def transcribe(audio_path, language=None, translate=False, want_words=False,
-               log=print):
+               prompt=None, log=print):
     """Transcribe (or translate) a file with Groq.
 
     Returns (segments, info) shaped like faster-whisper's output: segments
@@ -218,6 +218,8 @@ def transcribe(audio_path, language=None, translate=False, want_words=False,
                   ("temperature", "0")]
         if language and not translate:
             fields.append(("language", language))
+        if prompt:
+            fields.append(("prompt", prompt))
         if want_words:
             fields.append(("timestamp_granularities[]", "word"))
             fields.append(("timestamp_granularities[]", "segment"))

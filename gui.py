@@ -13,7 +13,7 @@ from pathlib import Path
 import customtkinter as ctk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
-from transcribe import AUDIO_EXTS, fmt_ts
+from transcribe import AUDIO_EXTS, fmt_ts, get_vocabulary
 
 APP_NAME = "Offline Transcriber"
 LANGUAGES = {
@@ -44,6 +44,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.msg_queue = queue.Queue()
         self.last_out_dir = None
         self.live_stop = None      # threading.Event while live mode runs
+        self.speaker_runs = []     # diarized results of the last job, for
+                                   # the "Name speakers" dialog
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -89,9 +91,11 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.srt_var = ctk.BooleanVar()
         self.translate_var = ctk.BooleanVar()
         self.cloud_var = ctk.BooleanVar()
+        self.notes_var = ctk.BooleanVar()
         for text, var in [("Speaker labels", self.speakers_var),
                           ("Subtitles (.srt)", self.srt_var),
                           ("Translate to English", self.translate_var),
+                          ("📝 Meeting notes", self.notes_var),
                           ("⚡ Cloud boost (free)", self.cloud_var)]:
             ctk.CTkSwitch(side, text=text, variable=var
                           ).pack(anchor="w", padx=20, pady=(6, 0))
@@ -166,6 +170,12 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                       corner_radius=10, fg_color="gray30",
                       hover_color="gray25", command=self._clear
                       ).grid(row=0, column=1, padx=(8, 0))
+        self.name_btn = ctk.CTkButton(controls, text="Name speakers",
+                                      height=40, width=130, corner_radius=10,
+                                      fg_color="gray30", hover_color="gray25",
+                                      state="disabled",
+                                      command=self._open_name_dialog)
+        self.name_btn.grid(row=0, column=2, padx=(8, 0), sticky="w")
         self.open_btn = ctk.CTkButton(controls, text="Open output folder",
                                       height=40, width=160, corner_radius=10,
                                       fg_color="gray30", hover_color="gray25",
@@ -259,6 +269,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                     self.progress.grid_remove()
                     if self.last_out_dir:
                         self.open_btn.configure(state="normal")
+                    if self.speaker_runs:
+                        self.name_btn.configure(state="normal")
                 elif kind == "live_done":
                     self.live_stop = None
                     self.live_btn.configure(text="🎤  Start live mic",
@@ -270,6 +282,87 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         except queue.Empty:
             pass
         self.after(100, self._poll_queue)
+
+    # ---------- speaker naming ----------------------------------------------
+    def _open_name_dialog(self):
+        run = self.speaker_runs[-1] if self.speaker_runs else None
+        if not run:
+            return
+        from voices import display_name
+
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("Name speakers")
+        dlg.geometry("560x420")
+        dlg.transient(self)
+        dlg.grab_set()
+
+        ctk.CTkLabel(dlg, text=f"Who is who in {run['path'].name}?",
+                     font=ctk.CTkFont(size=16, weight="bold")
+                     ).pack(anchor="w", padx=16, pady=(14, 2))
+        ctk.CTkLabel(dlg, text="Named voices are remembered — future "
+                               "meetings will label these people "
+                               "automatically.", text_color="gray60"
+                     ).pack(anchor="w", padx=16, pady=(0, 8))
+
+        body = ctk.CTkScrollableFrame(dlg)
+        body.pack(fill="both", expand=True, padx=12, pady=4)
+        entries = {}
+        nums = sorted({spk for spk, *_ in run["turns"]})
+        for num in nums:
+            quote = next((tx for spk, _, _, tx in run["turns"]
+                          if spk == num), "")
+            row = ctk.CTkFrame(body, fg_color="transparent")
+            row.pack(fill="x", pady=6)
+            ctk.CTkLabel(row, text=f"Speaker {num}", width=80, anchor="w",
+                         font=ctk.CTkFont(weight="bold")).pack(side="left")
+            entry = ctk.CTkEntry(row, width=160,
+                                 placeholder_text="name (optional)")
+            entry.insert(0, run["names"].get(num, ""))
+            entry.pack(side="left", padx=(4, 8))
+            ctk.CTkLabel(row, text=f"“{quote[:52]}…”" if len(quote) > 52
+                         else f"“{quote}”", text_color="gray60",
+                         anchor="w").pack(side="left", fill="x", expand=True)
+            entries[num] = entry
+
+        def save():
+            from voices import enroll
+            names = {num: e.get().strip()
+                     for num, e in entries.items() if e.get().strip()}
+            profiles = None
+            for num, name in names.items():
+                if num in run["centroids"]:
+                    profiles = enroll(name, run["centroids"][num], profiles)
+            for r in self.speaker_runs:      # rewrite every file of the job
+                r["names"].update(
+                    {num: name for num, name in names.items()})
+                lines = [(st, en,
+                          f"{display_name(spk, r['names'])}: {tx}")
+                         for spk, st, en, tx in r["turns"]]
+                txt = r["path"].with_suffix(".txt")
+                txt.write_text(
+                    "\n".join(tx for _, _, tx in lines) + "\n",
+                    encoding="utf-8")
+                if r["srt"]:
+                    blocks = []
+                    for i, (st, en, tx) in enumerate(lines, 1):
+                        blocks.append(
+                            f"{i}\n{fmt_ts(st, srt=True)} --> "
+                            f"{fmt_ts(en, srt=True)}\n{tx}\n")
+                    r["path"].with_suffix(".srt").write_text(
+                        "\n".join(blocks), encoding="utf-8")
+            if names:
+                self._log("speakers named & voices remembered: "
+                          + ", ".join(names.values())
+                          + " — transcripts updated.")
+            dlg.destroy()
+
+        btn_row = ctk.CTkFrame(dlg, fg_color="transparent")
+        btn_row.pack(fill="x", padx=12, pady=10)
+        ctk.CTkButton(btn_row, text="Save & remember voices", command=save
+                      ).pack(side="right")
+        ctk.CTkButton(btn_row, text="Cancel", fg_color="gray30",
+                      hover_color="gray25", command=dlg.destroy
+                      ).pack(side="right", padx=(0, 8))
 
     # ---------- live microphone mode ----------------------------------------
     def _toggle_live(self):
@@ -309,7 +402,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                 segments, info = whisper.transcribe(
                     np.concatenate(buf), language=a["language"],
                     task="translate" if a["translate"] else "transcribe",
-                    beam_size=2, vad_filter=True)
+                    beam_size=2, vad_filter=True,
+                    hotwords=get_vocabulary())
                 text = " ".join(s.text.strip() for s in segments).strip()
                 if text:
                     stamp = datetime.now().strftime("%H:%M:%S")
@@ -392,6 +486,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             "translate": self.translate_var.get(),
             "speakers": self.speakers_var.get(),
             "cloud": self.cloud_var.get(),
+            "notes": self.notes_var.get(),
             "files": list(self.files),
         }
         threading.Thread(target=self._run_job, args=(a,), daemon=True).start()
@@ -412,6 +507,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         return model
 
     def _run_job(self, a):
+        self.speaker_runs = []
         try:
             model = None if a["cloud"] else self._get_model(a["model"])
             for i, f in enumerate(a["files"], 1):
@@ -442,7 +538,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                                     "(free cloud)..."))
                 segments, info = cloud.transcribe(
                     path, language=a["language"], translate=a["translate"],
-                    want_words=a["speakers"], log=self._log)
+                    want_words=a["speakers"], prompt=get_vocabulary(),
+                    log=self._log)
             except cloud.CloudUnavailable as e:
                 self._log(f"cloud unavailable — using the local engine.\n"
                           f"({e})")
@@ -456,7 +553,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                 str(path), language=a["language"],
                 task="translate" if a["translate"] else "transcribe",
                 beam_size=5, batch_size=8,
-                word_timestamps=a["speakers"])
+                word_timestamps=a["speakers"],
+                hotwords=get_vocabulary())
         self._log(f"language: {info.language} "
                   f"({info.language_probability:.0%}), "
                   f"duration {fmt_ts(info.duration)}")
@@ -475,20 +573,29 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             from faster_whisper.audio import decode_audio
 
             from diarize import diarize_words
+            from voices import display_name, match_speakers
             words = [(w.start, w.end, w.word)
                      for s in seg_list for w in (s.words or [])]
             audio = decode_audio(str(path), sampling_rate=16000)
-            turns, n = diarize_words(audio, words)
+            turns, n, centroids = diarize_words(audio, words)
             if turns:
                 self._log(f"speakers found: {n}")
-                lines = [(st, en, f"Speaker {spk}: {tx}")
+                names = match_speakers(centroids)
+                if names:
+                    self._log("recognized voices: " + ", ".join(
+                        f"Speaker {num} = {name}" for num, name in
+                        sorted(names.items())))
+                lines = [(st, en, f"{display_name(spk, names)}: {tx}")
                          for spk, st, en, tx in turns]
                 for _, _, tx in lines:
                     self._log(tx)
+                self.speaker_runs.append({
+                    "path": path, "turns": turns, "centroids": centroids,
+                    "names": names, "srt": a["srt"]})
 
+        transcript_text = "\n".join(tx for _, _, tx in lines) + "\n"
         txt = path.with_suffix(".txt")
-        txt.write_text("\n".join(tx for _, _, tx in lines) + "\n",
-                       encoding="utf-8")
+        txt.write_text(transcript_text, encoding="utf-8")
         saved = [txt.name]
         if a["srt"]:
             blocks = []
@@ -498,6 +605,20 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             srt = path.with_suffix(".srt")
             srt.write_text("\n".join(blocks), encoding="utf-8")
             saved.append(srt.name)
+
+        if a["notes"]:
+            self.msg_queue.put(("status",
+                                f"Writing meeting notes for {path.name}..."))
+            from notes import NotesUnavailable, generate_notes
+            try:
+                result = generate_notes(transcript_text, log=self._log)
+                notes_file = path.with_name(path.stem + "_notes.md")
+                notes_file.write_text(result + "\n", encoding="utf-8")
+                saved.append(notes_file.name)
+                self._log("\n" + result)
+            except NotesUnavailable as e:
+                self._log(f"meeting notes skipped: {e}")
+
         self.last_out_dir = str(path.parent)
         self._log("saved: " + ", ".join(saved))
 
