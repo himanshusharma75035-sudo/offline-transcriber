@@ -6,3 +6,4 @@ __pycache__/
 
 # transcription outputs that may land in the repo during testing
 live_*.txt
+*.tmp.*
