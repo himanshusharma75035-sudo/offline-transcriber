@@ -6,8 +6,10 @@
 #   bundles the ML runtimes; zip it to share.
 # - Speech models still download on first use on the target machine
 #   (or copy %USERPROFILE%\.cache\huggingface across for full offline).
-# - The IndicConformer engine (indic.bat) is not included in the exe to
-#   keep the size sane; everything else works.
+# - The IndicConformer engine (indic.bat) is not included in the exe
+#   (transformers is excluded to keep the size sane); everything else works.
+#   torchaudio must stay bundled — speechbrain imports it at load, so
+#   excluding it silently breaks speaker labels and voice memory.
 # - Build artifacts are written OUTSIDE synced folders on purpose.
 
 $ErrorActionPreference = "Stop"
@@ -30,7 +32,6 @@ $work = Join-Path $env:LOCALAPPDATA "OfflineTranscriber-build"
     --collect-all faster_whisper `
     --copy-metadata torch `
     --exclude-module transformers `
-    --exclude-module torchaudio `
     --exclude-module PIL.ImageQt `
     --add-data "$PSScriptRoot\vocabulary.txt;." `
     (Join-Path $PSScriptRoot "gui.py")

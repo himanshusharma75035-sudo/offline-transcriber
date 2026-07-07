@@ -27,10 +27,12 @@ EMBED_BATCH = 32
 # cosine-distance threshold for "same speaker" when the count is unknown;
 # raise it if one voice gets split into two, lower it if voices merge
 CLUSTER_THRESHOLD = 0.8
-# clusters smaller than this share of windows are treated as boundary
-# artifacts (a window straddling two voices) and merged into the nearest
-# real cluster
-MIN_CLUSTER_SHARE = 0.1
+# A cluster this small is treated as a boundary artifact (a stray window
+# straddling two voices) and merged into the nearest real cluster. Kept as
+# a tiny ABSOLUTE count on purpose: a share-based threshold (e.g. 10%) would
+# delete a genuine but quiet participant — someone who speaks only a few
+# minutes of a long meeting — and their words would be misattributed.
+MIN_CLUSTER_WINDOWS = 2
 
 _classifier = None
 
@@ -98,18 +100,19 @@ def build_timeline(audio: np.ndarray, num_speakers=None):
             metric="cosine", linkage="average")
     raw = clusterer.fit_predict(X)
 
-    # absorb boundary-artifact mini-clusters into the nearest real cluster
+    # absorb genuinely tiny (artifact-sized) clusters into the nearest real
+    # cluster; a real quiet speaker keeps their own cluster
     if num_speakers is None:
         counts = {lab: int((raw == lab).sum()) for lab in set(raw)}
-        min_size = max(2, int(MIN_CLUSTER_SHARE * len(raw)))
-        big = [lab for lab, c in counts.items() if c >= min_size]
+        big = [lab for lab, c in counts.items() if c > MIN_CLUSTER_WINDOWS]
         if big and len(big) < len(counts):
-            centroids = {lab: X[raw == lab].mean(axis=0) for lab in big}
+            cluster_centroids = {lab: X[raw == lab].mean(axis=0)
+                                 for lab in big}
             for i, lab in enumerate(raw):
                 if lab not in big:
                     raw[i] = min(big, key=lambda b: 1 - float(
-                        np.dot(X[i], centroids[b])
-                        / np.linalg.norm(centroids[b])))
+                        np.dot(X[i], cluster_centroids[b])
+                        / np.linalg.norm(cluster_centroids[b])))
 
     # temporal smoothing: a lone window between two same-speaker windows is
     # almost always a mis-assignment at a turn boundary

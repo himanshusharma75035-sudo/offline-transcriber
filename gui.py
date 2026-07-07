@@ -381,16 +381,21 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             entries[num] = entry
 
         def save():
-            from voices import enroll
+            from voices import enroll, match_speakers
             names = {num: e.get().strip()
                      for num, e in entries.items() if e.get().strip()}
             profiles = None
             for num, name in names.items():
                 if num in run["centroids"]:
                     profiles = enroll(name, run["centroids"][num], profiles)
-            for r in self.speaker_runs:      # rewrite every file of the job
-                r["names"].update(
-                    {num: name for num, name in names.items()})
+
+            # Speaker numbers are per-file, so this dialog's number->name map
+            # only applies to the file it was built from. Other files in the
+            # batch are re-named by matching their voices against the freshly
+            # enrolled profiles — the same mechanism used in future meetings.
+            for r in self.speaker_runs:
+                r["names"] = (dict(names) if r is run
+                              else match_speakers(r["centroids"]))
                 lines = [(st, en,
                           f"{display_name(spk, r['names'])}: {tx}")
                          for spk, st, en, tx in r["turns"]]

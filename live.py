@@ -47,12 +47,23 @@ def rms(block: np.ndarray) -> float:
 
 
 def find_loopback_device():
-    """Find a device that captures system audio (what the speakers play)."""
-    for i, d in enumerate(sd.query_devices()):
-        if (d["max_input_channels"] > 0
-                and any(k in d["name"].lower() for k in LOOPBACK_KEYWORDS)):
+    """Find a device that captures system audio (what the speakers play).
+
+    Windows enumerates the same physical device once per host API (MME,
+    DirectSound, WASAPI, WDM-KS); only some accept a 16 kHz mono stream
+    (PortAudio does not resample). Prefer a candidate that actually opens.
+    """
+    candidates = [i for i, d in enumerate(sd.query_devices())
+                  if d["max_input_channels"] > 0
+                  and any(k in d["name"].lower() for k in LOOPBACK_KEYWORDS)]
+    for i in candidates:
+        try:
+            sd.check_input_settings(device=i, samplerate=SAMPLE_RATE,
+                                    channels=1, dtype="float32")
             return i
-    return None
+        except Exception:
+            continue
+    return candidates[0] if candidates else None
 
 
 def resolve_sources(source, mic_device):
@@ -154,6 +165,15 @@ def main():
                 transcribe_chunk(tag, np.concatenate(bufs[tag]))
             bufs[tag], speech[tag], silence[tag] = [], 0.0, 0.0
 
+    def save_transcript():
+        if not transcript:
+            print("\nno speech captured.")
+            return
+        out = Path(__file__).parent / (
+            "live_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".txt")
+        out.write_text("\n".join(transcript) + "\n", encoding="utf-8")
+        print(f"\nsaved session transcript: {out}")
+
     streams = [sd.InputStream(samplerate=SAMPLE_RATE, channels=1,
                               dtype="float32", device=dev,
                               blocksize=int(SAMPLE_RATE * BLOCK_SECONDS),
@@ -162,37 +182,42 @@ def main():
     try:
         for s in streams:
             s.start()
-        while True:
-            tag, block = audio_q.get()
+        # timeout so Ctrl+C is honoured promptly and, if every stream dies
+        # silently (device unplugged, endpoint change), we don't hang forever
+        while any(s.active for s in streams):
+            try:
+                tag, block = audio_q.get(timeout=0.3)
+            except queue.Empty:
+                continue
             feed(tag, block)
+        else:
+            print("\naudio device stopped; saving what was captured.",
+                  file=sys.stderr)
     except KeyboardInterrupt:
         pass
     finally:
-        for s in streams:
-            try:
-                s.stop()
-                s.close()
-            except Exception:
-                pass
-
-    # drain whatever is still queued, then flush the open buffers
-    while True:
+        # Everything below must run even on a second Ctrl+C or a transcribe
+        # error, or an entire meeting's transcript is lost.
         try:
-            tag, block = audio_q.get_nowait()
-        except queue.Empty:
-            break
-        feed(tag, block)
-    for tag, _ in sources:
-        feed(tag, np.zeros(int(SAMPLE_RATE * BLOCK_SECONDS),
-                           dtype=np.float32), drain_all=True)
-
-    if transcript:
-        out = Path(__file__).parent / (
-            "live_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".txt")
-        out.write_text("\n".join(transcript) + "\n", encoding="utf-8")
-        print(f"\nsaved session transcript: {out}")
-    else:
-        print("\nno speech captured.")
+            for s in streams:
+                try:
+                    s.stop()
+                    s.close()
+                except Exception:
+                    pass
+            # drain whatever is still queued, then flush the open buffers
+            while True:
+                try:
+                    tag, block = audio_q.get_nowait()
+                except queue.Empty:
+                    break
+                feed(tag, block)
+            for tag, _ in sources:
+                feed(tag, np.zeros(int(SAMPLE_RATE * BLOCK_SECONDS),
+                                   dtype=np.float32), drain_all=True)
+        except BaseException as e:      # never lose the transcript to cleanup
+            print(f"\n(finishing early: {e})", file=sys.stderr)
+        save_transcript()
 
 
 if __name__ == "__main__":
