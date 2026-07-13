@@ -109,7 +109,7 @@ def match_speakers(centroids):
             if best >= MATCH_THRESHOLD:
                 scores.append((best, num, name))
     assigned, used_nums, used_names = {}, set(), set()
-    for score, num, name in sorted(scores, reverse=True):
+    for _score, num, name in sorted(scores, reverse=True):
         if num not in used_nums and name not in used_names:
             assigned[num] = name
             used_nums.add(num)

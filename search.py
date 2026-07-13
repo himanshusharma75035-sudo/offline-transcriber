@@ -2,7 +2,7 @@
 
 Usage:
     search.bat "mismatch"                          # search current folder
-    search.bat "UTR" "C:\\Users\\me\\Downloads"    # search a specific folder
+    search.bat "invoice" "C:\\Users\\me\\Downloads"  # search a specific folder
     search.bat "refund" --context 1                # show surrounding lines
 """
 

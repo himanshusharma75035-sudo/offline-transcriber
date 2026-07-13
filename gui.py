@@ -14,6 +14,8 @@ from pathlib import Path
 import customtkinter as ctk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
+import logging_setup
+import policy
 from transcribe import AUDIO_EXTS, fmt_ts, get_vocabulary
 
 APP_NAME = "Offline Transcriber"
@@ -39,6 +41,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
     def __init__(self):
         super().__init__()
         self.TkdndVersion = TkinterDnD._require(self)
+
+        logging_setup.setup()
+        logging_setup.install_gui_crash_handler(self)
 
         self.title(APP_NAME)
         self.geometry("1020x660")
@@ -83,6 +88,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                     var.set(data[name])
                 except Exception:
                     pass
+        # a saved cloud=true must never override the offline-only policy
+        if not policy.cloud_allowed():
+            self.cloud_var.set(False)
         ctk.set_appearance_mode(self.theme_var.get())
 
     def _on_close(self):
@@ -134,18 +142,29 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.cloud_var = ctk.BooleanVar()
         self.notes_var = ctk.BooleanVar()
         self.docx_var = ctk.BooleanVar()
-        for text, var in [("Speaker labels", self.speakers_var),
-                          ("Subtitles (.srt)", self.srt_var),
-                          ("Word (.docx)", self.docx_var),
-                          ("Translate to English", self.translate_var),
-                          ("📝 Meeting notes", self.notes_var),
-                          ("⚡ Cloud boost (free)", self.cloud_var)]:
+        switches = [("Speaker labels", self.speakers_var),
+                    ("Subtitles (.srt)", self.srt_var),
+                    ("Word (.docx)", self.docx_var),
+                    ("Translate to English", self.translate_var),
+                    ("📝 Meeting notes", self.notes_var)]
+        # The cloud boost uploads audio to Groq, so it only appears when cloud
+        # has been explicitly opted in (see policy.py). Offline-only by default.
+        self._cloud_allowed = policy.cloud_allowed()
+        if self._cloud_allowed:
+            switches.append(("⚡ Cloud boost", self.cloud_var))
+        else:
+            self.cloud_var.set(False)
+        for text, var in switches:
             ctk.CTkSwitch(side, text=text, variable=var
                           ).pack(anchor="w", padx=20, pady=(6, 0))
-        ctk.CTkLabel(side, text="Cloud: ~100x faster via Groq's free\n"
-                                "tier (needs internet + free key);\n"
-                                "falls back to offline automatically.",
-                     justify="left", text_color="gray60",
+        if self._cloud_allowed:
+            note = ("Cloud: ~100x faster via Groq (uploads\n"
+                    "audio); falls back to offline if it\n"
+                    "can't be reached.")
+        else:
+            note = ("🔒 Offline-only: nothing leaves this\n"
+                    "machine. Notes use local Ollama.")
+        ctk.CTkLabel(side, text=note, justify="left", text_color="gray60",
                      font=ctk.CTkFont(size=11)
                      ).pack(anchor="w", padx=20, pady=(4, 0))
 

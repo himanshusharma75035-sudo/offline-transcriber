@@ -5,7 +5,7 @@ from pathlib import Path
 
 def write_docx(out_path, title, lines):
     """lines: [(start_s, end_s, text)] — speaker prefixes like
-    'Tania: ...' are rendered with the name in bold."""
+    'Speaker 1: ...' are rendered with the name in bold."""
     from docx import Document
     from docx.shared import Pt, RGBColor
 

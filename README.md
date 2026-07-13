@@ -71,7 +71,8 @@ models.
 
 | | Feature | What it gives you |
 |---|---|---|
-| ⚡ | **Free cloud boost** *(optional)* | One switch routes audio to Groq's free tier — **~100× faster** than CPU and *more* accurate (Whisper large-v3-turbo). Falls back to the offline engine automatically. |
+| 🔒 | **Offline-only by default** | Nothing leaves your machine. Speech, speakers, and (via Ollama) notes all run locally — the compliant default for sensitive audio. |
+| ⚡ | **Cloud boost** *(opt-in, off by default)* | *If you enable it,* one switch routes non-sensitive audio to Groq's free tier — **~100× faster** and *more* accurate (large-v3-turbo), with automatic offline fallback. Admin-lockable. |
 | 🖥️ | **Modern GUI** | Drag & drop, dark/light theme, live progress, Cancel button, remembers your settings. |
 | 🗣️ | **Speaker labels + voice memory** | Diarization splits *who said what*. Name a speaker once — future meetings label them automatically. Voice fingerprints stay on your machine. |
 | 📝 | **Instant meeting notes** | Summary, key points and action items in seconds via Groq LLMs, or a local Ollama model fully offline. |
@@ -154,10 +155,13 @@ notes are optional add-ons that switch on when you ask for them.
 
 ## ⚡ Offline vs cloud boost
 
-The offline engine is **private but CPU-slow**. When speed matters and
-the recording isn't sensitive, flip on **⚡ Cloud boost** — and if the key
-is missing, or you're offline, or the upload fails, it silently falls
-back to local. **Nothing ever breaks; nothing is ever forced online.**
+**Offline is the default and nothing leaves your machine unless you turn
+cloud on.** The offline engine is private but CPU-slow; when speed matters
+and a recording *isn't* sensitive, you can opt in to the Groq cloud boost.
+Cloud is **off by default** and must be explicitly enabled (see below) — and
+even then, if the key is missing, you're offline, or an upload fails, it
+silently falls back to local. **Nothing ever breaks; nothing is ever sent
+without opt-in.** See [SECURITY.md](SECURITY.md) for the full data policy.
 
 ```
                        ┌────────────────────────────┐
@@ -188,14 +192,20 @@ back to local. **Nothing ever breaks; nothing is ever forced online.**
 | **Cost** | free forever | free (~8 hrs/day, no card) |
 | **Internet** | only once, for models | required while it's on |
 
-> **One-time cloud setup:** create a free account at
-> [console.groq.com](https://console.groq.com), make a key at
-> [console.groq.com/keys](https://console.groq.com/keys), and paste it
-> into a file named `groq_api_key.txt` next to the scripts. Long
-> recordings are split at quiet moments and stitched back automatically.
+> **Enabling cloud (opt-in, for non-sensitive audio only):**
+> 1. **Turn the policy on** — set `TRANSCRIBER_ALLOW_CLOUD=1` or create an
+>    empty file named `allow_cloud` next to the app. Until you do, the ⚡
+>    switch doesn't even appear and `--cloud` is ignored.
+> 2. **Add a key** — free account at [console.groq.com](https://console.groq.com),
+>    key at [console.groq.com/keys](https://console.groq.com/keys); store it
+>    in the `GROQ_API_KEY` env var (or Windows Credential Manager via
+>    `keyring`, or a `groq_api_key.txt` file — least secure).
 >
-> **Privacy:** cloud mode uploads that recording to Groq. Keep the switch
-> **off** for anything confidential — the offline engine handles it.
+> Long recordings are split at quiet moments and stitched back automatically.
+>
+> **Admin lock:** IT can force offline everywhere with
+> `TRANSCRIBER_FORCE_OFFLINE=1` or a machine policy file — it overrides any
+> user opt-in. Details in [SECURITY.md](SECURITY.md).
 
 <br>
 
@@ -217,7 +227,7 @@ locally — and **every future meeting labels them by name automatically**.
                                  ▼
    ┌───────────────────────────────────────────────────────────┐
    │  2. YOU NAME THEM ONCE                                    │
-   │     Speaker 1  →  Himanshu      Speaker 2  →  Tania       │
+   │     Speaker 1  →  Alex       Speaker 2  →  Sam            │
    │     voiceprints saved locally  →  speaker_profiles.json   │
    └───────────────────────────────────────────────────────────┘
                                  │
@@ -225,7 +235,7 @@ locally — and **every future meeting labels them by name automatically**.
    ┌───────────────────────────────────────────────────────────┐
    │  3. EVERY FUTURE MEETING  —  automatic                    │
    │     new voice  →  match saved (cosine ≥ 0.55)  →  name    │
-   │     result:   "Himanshu: …"    "Tania: …"   ✓             │
+   │     result:   "Alex: …"    "Sam: …"   ✓                   │
    └───────────────────────────────────────────────────────────┘
 ```
 

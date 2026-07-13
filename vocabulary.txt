@@ -2,19 +2,17 @@
 # the speech engines so they get spelled correctly in transcripts.
 # Edit freely: add your company terms, product names, people's names.
 # Lines starting with # are ignored.
-Eko
-UTR
-CSP
-DMT
-IMPS
-NEFT
-RTGS
-UPI
-AePS
+#
+# The entries below are generic examples — replace them with your own.
+invoice
 reconciliation
-money transfer
-inter-fund transfer
-bank statement
 settlement
-Himanshu
-Tania
+wire transfer
+balance sheet
+quarterly report
+compliance
+onboarding
+API integration
+action item
+# add your teammates' and clients' names below (one per line) so the
+# transcriber spells them right — keep personal names out of a shared repo

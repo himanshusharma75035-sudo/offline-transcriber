@@ -12,10 +12,16 @@ Sindhi (sd), Kashmiri (ks) — plus English (en) and ~90 other languages.
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time
 from pathlib import Path
+
+import logging_setup
+import policy
+
+log = logging.getLogger("transcriber")
 
 # Windows consoles often default to a legacy codepage that can't print
 # Indian scripts; force UTF-8 so Devanagari/Tamil/etc. don't crash output.
@@ -180,6 +186,7 @@ def transcribe_file(get_model, audio_path: Path, args):
 
 
 def main():
+    logging_setup.setup()
     parser = argparse.ArgumentParser(
         description="Offline transcription for Indian languages + English.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -195,10 +202,12 @@ def main():
                         help="translate the speech to English instead of "
                              "transcribing in the original language")
     parser.add_argument("--cloud", action="store_true",
-                        help="use the free Groq cloud: ~100x faster and more "
-                             "accurate, needs internet + a free API key "
-                             "(instructions are printed if it's missing); "
-                             "falls back to the local engine automatically")
+                        help="use the Groq cloud (~100x faster) INSTEAD of "
+                             "running offline. OFF by default and ignored "
+                             "unless cloud is opted in (TRANSCRIBER_ALLOW_CLOUD"
+                             "=1); uploads audio to Groq, so use only for "
+                             "non-sensitive recordings. Falls back to the "
+                             "local engine automatically.")
     parser.add_argument("--srt", action="store_true",
                         help="also write an .srt subtitle file")
     parser.add_argument("--docx", action="store_true",
@@ -225,6 +234,10 @@ def main():
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
     args = parser.parse_args()
 
+    if args.cloud and not policy.cloud_allowed():
+        print(f"note: --cloud requested but {policy.reason()}", file=sys.stderr)
+        print("      transcribing fully offline instead.\n", file=sys.stderr)
+
     files = collect_inputs(args.inputs)
     if not files:
         print("error: no audio files found", file=sys.stderr)
@@ -245,14 +258,17 @@ def main():
                                           cpu_threads=os.cpu_count() or 4)
         return cache["model"]
 
-    if not args.cloud:
+    if not (args.cloud and policy.cloud_allowed()):
         get_model()      # load upfront so the wait happens before file 1
 
+    log.info("transcribe start: %d file(s), model=%s, cloud=%s",
+             len(files), args.model, args.cloud and policy.cloud_allowed())
     for f in files:
         try:
             transcribe_file(get_model, f, args)
         except Exception as e:
             print(f"error transcribing {f}: {e}", file=sys.stderr)
+            log.exception("error transcribing %s", f)
 
 
 if __name__ == "__main__":

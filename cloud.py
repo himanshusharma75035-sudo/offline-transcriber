@@ -78,7 +78,22 @@ class CloudUnavailable(Exception):
 
 
 def get_api_key():
+    """The Groq API key, looked up in order of decreasing security:
+      1. the GROQ_API_KEY environment variable,
+      2. the OS secret store (Windows Credential Manager / macOS Keychain /
+         Secret Service) via `keyring`, if installed, and
+      3. a plaintext groq_api_key.txt next to the app (discouraged; least
+         secure — kept only for convenience).
+    The key is never written to logs. Returns None if nothing is configured.
+    """
     key = os.environ.get("GROQ_API_KEY", "").strip()
+    if not key:
+        try:
+            import keyring
+            key = (keyring.get_password("offline-transcriber",
+                                        "GROQ_API_KEY") or "").strip()
+        except Exception:
+            key = ""       # keyring not installed / no backend — fall through
     if not key:
         key_file = Path(__file__).parent / "groq_api_key.txt"
         if key_file.is_file():
@@ -163,7 +178,7 @@ def _request(endpoint, fields, wav, key, log=print):
                 pass
             if e.code == 401:
                 raise CloudUnavailable(
-                    "the API key was rejected (401). " + SETUP_HELP)
+                    "the API key was rejected (401). " + SETUP_HELP) from e
             if e.code == 429 and attempt < MAX_RETRIES - 1:
                 try:
                     wait = min(float(e.headers.get("retry-after") or 15), 60)
@@ -173,13 +188,13 @@ def _request(endpoint, fields, wav, key, log=print):
                 time.sleep(wait)
                 last_error = f"rate limited (429): {detail}"
                 continue
-            raise CloudUnavailable(f"Groq error {e.code}: {detail}")
+            raise CloudUnavailable(f"Groq error {e.code}: {detail}") from e
         except (urllib.error.URLError, OSError, TimeoutError,
                 http.client.HTTPException, ValueError) as e:
             # URLError/OSError: no connection; HTTPException: connection
             # dropped mid-response; ValueError: non-JSON body (captive
             # portal / proxy). All mean "can't use the cloud right now".
-            raise CloudUnavailable(f"no usable connection to Groq ({e})")
+            raise CloudUnavailable(f"no usable connection to Groq ({e})") from e
     raise CloudUnavailable(last_error or "retries exhausted")
 
 
@@ -192,6 +207,12 @@ def transcribe(audio_path, language=None, translate=False, want_words=False,
     .language_probability, .duration. Raises CloudUnavailable if the cloud
     can't be used (caller should fall back to the local engine).
     """
+    import policy
+    if not policy.cloud_allowed():
+        # offline-only by default; nothing is uploaded unless explicitly
+        # opted in (see policy.py). Caller falls back to the local engine.
+        raise CloudUnavailable(policy.reason())
+
     key = get_api_key()
     if not key:
         raise CloudUnavailable(SETUP_HELP)

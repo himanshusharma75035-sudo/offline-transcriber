@@ -11,8 +11,19 @@ live_*.txt
 # secrets — never commit the API key
 groq_api_key.txt
 
+# local cloud opt-in marker (a per-machine choice, not a repo default)
+allow_cloud
+
 # personal voice fingerprints
 speaker_profiles.json
 
 # per-user GUI preferences
 .settings.json
+
+# build / packaging / test artifacts
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

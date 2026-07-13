@@ -1,19 +1,39 @@
-# speech-to-text engine (Whisper via CTranslate2, CPU-friendly)
-faster-whisper
+# Pinned, reproducible runtime for Offline Transcriber.
+# Abstract dependency ranges live in pyproject.toml; these are exact pins for
+# reproducible installs (the versions this release is tested against).
+# Install:  pip install -r requirements.txt
+#
+# CPU-only by default. For NVIDIA GPU, install the matching CUDA torch build
+# from https://pytorch.org first, then run this file.
 
-# GUI
-customtkinter
-tkinterdnd2
+# --- speech-to-text engine (Whisper via CTranslate2) ---
+faster-whisper==1.2.1
+ctranslate2==4.8.0
+av==18.0.0
+onnxruntime==1.27.0
+tokenizers==0.22.2
 
-# live microphone mode
-sounddevice
-numpy
+# --- GUI ---
+customtkinter==6.0.0
+tkinterdnd2==0.5.0
 
-# speaker diarization
-speechbrain
-scikit-learn
+# --- live microphone / call capture ---
+sounddevice==0.5.5
 
-# AI4Bharat IndicConformer engine (optional but installed by default; large)
-torch
-torchaudio
-transformers
+# --- numerics / speaker diarization ---
+numpy==2.5.0
+scipy==1.18.0
+scikit-learn==1.9.0
+speechbrain==1.1.0
+torch==2.12.1
+torchaudio==2.11.0
+
+# --- Word (.docx) export ---
+python-docx==1.2.0
+
+# --- AI4Bharat IndicConformer engine (indic.bat); large, optional ---
+transformers==5.12.1
+
+# --- optional: secure API-key storage for the opt-in cloud boost ---
+# (uncomment if you enable cloud; not required for offline use)
+# keyring==25.6.0
