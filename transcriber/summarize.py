@@ -21,7 +21,7 @@ if sys.stdout:
 if sys.stderr:
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-from notes import NotesUnavailable, generate_notes  # noqa: E402
+from .notes import NotesUnavailable, generate_notes  # noqa: E402
 
 
 def main():

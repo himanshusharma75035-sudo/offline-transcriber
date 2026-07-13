@@ -1,0 +1,6 @@
+"""`python -m transcriber` runs the command-line transcriber."""
+
+from .transcribe import main
+
+if __name__ == "__main__":
+    main()

@@ -7,7 +7,7 @@ separately with real audio.)"""
 
 import numpy as np
 
-import diarize
+from transcriber import diarize
 
 
 def test_min_cluster_windows_is_absolute_two():

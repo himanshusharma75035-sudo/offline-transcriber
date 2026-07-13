@@ -25,7 +25,7 @@ if sys.stdout:
 if sys.stderr:
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-from transcribe import collect_inputs  # noqa: E402
+from .transcribe import collect_inputs  # noqa: E402
 
 MODEL_ID = "ai4bharat/indic-conformer-600m-multilingual"
 LANGS = {

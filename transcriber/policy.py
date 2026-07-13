@@ -33,8 +33,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from . import paths
+
 _TRUE = {"1", "true", "yes", "on", "y"}
-_APP_DIR = Path(__file__).resolve().parent
 
 
 class CloudDisabled(Exception):
@@ -64,7 +65,7 @@ def force_offline() -> bool:
 def _opted_in() -> bool:
     if _env_true("TRANSCRIBER_ALLOW_CLOUD"):
         return True
-    return (_APP_DIR / "allow_cloud").is_file()
+    return paths.marker_exists("allow_cloud")
 
 
 def cloud_allowed() -> bool:

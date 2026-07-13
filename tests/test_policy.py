@@ -5,12 +5,15 @@ import pytest
 
 @pytest.fixture
 def policy(monkeypatch, tmp_path):
-    """The policy module with a clean env and an app dir that has no markers."""
-    import policy as _policy
+    """The policy module with a clean env and a marker dir that starts empty."""
+    from transcriber import paths as _paths
+    from transcriber import policy as _policy
     monkeypatch.delenv("TRANSCRIBER_ALLOW_CLOUD", raising=False)
     monkeypatch.delenv("TRANSCRIBER_FORCE_OFFLINE", raising=False)
-    # point the "app dir" and machine-policy lookup at empty temp locations
-    monkeypatch.setattr(_policy, "_APP_DIR", tmp_path)
+    # point the opt-in marker lookup at an empty temp dir and disable the
+    # machine-wide force-offline files
+    monkeypatch.setattr(_paths, "_LEGACY_DIR", tmp_path)
+    monkeypatch.setattr(_paths, "data_dir", lambda: tmp_path)
     monkeypatch.setattr(_policy, "_machine_policy_files", lambda: iter(()))
     return _policy
 
@@ -38,8 +41,8 @@ def test_opt_in_rejects_non_truthy(policy, monkeypatch, value):
     assert policy.cloud_allowed() is False
 
 
-def test_marker_file_opts_in(policy):
-    (policy._APP_DIR / "allow_cloud").write_text("", encoding="utf-8")
+def test_marker_file_opts_in(policy, tmp_path):
+    (tmp_path / "allow_cloud").write_text("", encoding="utf-8")
     assert policy.cloud_allowed() is True
 
 

@@ -53,20 +53,19 @@ Issues = "https://github.com/himanshusharma75035-sudo/offline-transcriber/issues
 Security = "https://github.com/himanshusharma75035-sudo/offline-transcriber/blob/main/SECURITY.md"
 
 [project.scripts]
-transcribe = "transcribe:main"
-transcribe-gui = "gui:main"
-transcribe-live = "live:main"
-transcribe-watch = "watch:main"
-transcribe-notes = "summarize:main"
-transcribe-search = "search:main"
-transcribe-indic = "transcribe_indic:main"
+transcribe = "transcriber.transcribe:main"
+transcribe-gui = "transcriber.gui:main"
+transcribe-live = "transcriber.live:main"
+transcribe-watch = "transcriber.watch:main"
+transcribe-notes = "transcriber.summarize:main"
+transcribe-search = "transcriber.search:main"
+transcribe-indic = "transcriber.transcribe_indic:main"
 
 [tool.setuptools]
-py-modules = [
-    "cloud", "diarize", "docx_export", "gui", "live", "logging_setup",
-    "notes", "policy", "search", "summarize", "transcribe",
-    "transcribe_indic", "voices", "watch",
-]
+packages = ["transcriber"]
+
+[tool.setuptools.package-data]
+transcriber = ["data/*.txt"]
 
 [tool.ruff]
 target-version = "py310"

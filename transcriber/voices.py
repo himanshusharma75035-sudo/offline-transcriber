@@ -10,12 +10,13 @@ Everything stays local; the profiles file never leaves this folder.
 
 import json
 import os
-from pathlib import Path
 
 import numpy as np
 
-PROFILES_FILE = Path(__file__).parent / "speaker_profiles.json"
-BACKUP_FILE = Path(__file__).parent / "speaker_profiles.bak.json"
+from . import paths
+
+PROFILES_FILE = paths.user_file("speaker_profiles.json")
+BACKUP_FILE = PROFILES_FILE.with_name("speaker_profiles.bak.json")
 # cosine similarity needed to call a voice "the same person"; ECAPA
 # same-speaker similarity across sessions is typically 0.6-0.85,
 # different speakers 0.0-0.4

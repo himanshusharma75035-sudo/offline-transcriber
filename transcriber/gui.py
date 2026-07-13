@@ -14,9 +14,8 @@ from pathlib import Path
 import customtkinter as ctk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
-import logging_setup
-import policy
-from transcribe import AUDIO_EXTS, fmt_ts, get_vocabulary
+from . import logging_setup, paths, policy
+from .transcribe import AUDIO_EXTS, fmt_ts, get_vocabulary
 
 APP_NAME = "Offline Transcriber"
 LANGUAGES = {
@@ -27,7 +26,7 @@ LANGUAGES = {
 }
 MODELS = {"Fast (small)": "small", "Balanced (medium)": "medium",
           "Best (large-v3)": "large-v3"}
-SETTINGS_FILE = Path(__file__).parent / ".settings.json"
+SETTINGS_FILE = paths.user_file(".settings.json")
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -363,7 +362,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         run = self.speaker_runs[-1] if self.speaker_runs else None
         if not run:
             return
-        from voices import display_name
+        from .voices import display_name
 
         dlg = ctk.CTkToplevel(self)
         dlg.title("Name speakers")
@@ -400,7 +399,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             entries[num] = entry
 
         def save():
-            from voices import enroll, match_speakers
+            from .voices import enroll, match_speakers
             names = {num: e.get().strip()
                      for num, e in entries.items() if e.get().strip()}
             profiles = None
@@ -470,7 +469,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             import numpy as np
             import sounddevice as sd
 
-            from live import find_loopback_device
+            from .live import find_loopback_device
 
             # short utterances gain nothing from batching: use the raw model
             whisper = self._get_model(a["model"]).model
@@ -566,7 +565,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                      drain_all=True)
 
             if transcript:
-                out = Path(__file__).parent / (
+                out = paths.data_dir() / (
                     "live_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                     + ".txt")
                 out.write_text("\n".join(transcript) + "\n", encoding="utf-8")
@@ -662,7 +661,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._log(f"\n═══ {path.name} ═══")
         segments = None
         if a["cloud"]:
-            import cloud
+            from . import cloud
             try:
                 self.msg_queue.put(("status",
                                     f"Uploading {path.name} to Groq "
@@ -705,8 +704,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                                 f"Labelling speakers in {path.name}..."))
             from faster_whisper.audio import decode_audio
 
-            from diarize import diarize_words
-            from voices import display_name, match_speakers
+            from .diarize import diarize_words
+            from .voices import display_name, match_speakers
             words = [(w.start, w.end, w.word)
                      for s in seg_list for w in (s.words or [])]
             audio = decode_audio(str(path), sampling_rate=16000)
@@ -740,7 +739,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             saved.append(srt.name)
 
         if a["docx"]:
-            from docx_export import write_docx
+            from .docx_export import write_docx
             docx_path = write_docx(path.with_suffix(".docx"),
                                    path.stem, lines)
             saved.append(docx_path.name)
@@ -748,7 +747,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         if a["notes"]:
             self.msg_queue.put(("status",
                                 f"Writing meeting notes for {path.name}..."))
-            from notes import NotesUnavailable, generate_notes
+            from .notes import NotesUnavailable, generate_notes
             try:
                 result = generate_notes(transcript_text, log=self._log)
                 notes_file = path.with_name(path.stem + "_notes.md")

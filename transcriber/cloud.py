@@ -28,10 +28,11 @@ import urllib.error
 import urllib.request
 import uuid
 import wave
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+
+from . import paths
 
 # Whisper's language table (name -> ISO code): the API echoes full names
 # ("english") while the local engine uses codes ("en") — we normalize to
@@ -95,7 +96,7 @@ def get_api_key():
         except Exception:
             key = ""       # keyring not installed / no backend — fall through
     if not key:
-        key_file = Path(__file__).parent / "groq_api_key.txt"
+        key_file = paths.user_file("groq_api_key.txt")
         if key_file.is_file():
             key = key_file.read_text(encoding="utf-8").strip()
     return key or None
@@ -207,7 +208,7 @@ def transcribe(audio_path, language=None, translate=False, want_words=False,
     .language_probability, .duration. Raises CloudUnavailable if the cloud
     can't be used (caller should fall back to the local engine).
     """
-    import policy
+    from . import policy
     if not policy.cloud_allowed():
         # offline-only by default; nothing is uploaded unless explicitly
         # opted in (see policy.py). Caller falls back to the local engine.

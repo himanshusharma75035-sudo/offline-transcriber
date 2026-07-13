@@ -7,7 +7,7 @@ import wave
 import numpy as np
 import pytest
 
-import cloud
+from transcriber import cloud
 
 
 def test_short_audio_is_a_single_chunk():
@@ -59,7 +59,7 @@ def test_language_names_normalise_to_iso_codes(name, code):
 def test_transcribe_refuses_before_touching_audio_when_offline(monkeypatch):
     # even pointed at a missing file, it must raise on policy, not IO/network
     monkeypatch.delenv("TRANSCRIBER_ALLOW_CLOUD", raising=False)
-    import policy
+    from transcriber import policy
     monkeypatch.setattr(policy, "cloud_allowed", lambda: False)
     with pytest.raises(cloud.CloudUnavailable):
         cloud.transcribe("does-not-exist.wav")

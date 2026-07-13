@@ -12,7 +12,7 @@ import json
 import urllib.error
 import urllib.request
 
-from cloud import get_api_key
+from .cloud import get_api_key
 
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models"
@@ -126,7 +126,7 @@ def generate_notes(text, language="English", llm=None, log=print):
     nothing leaves the machine. The faster Groq cloud path is used only when
     cloud is explicitly enabled (see policy.py); otherwise it is skipped.
     """
-    import policy
+    from . import policy
     text = text.strip()
     if not text:
         raise NotesUnavailable("the transcript is empty")

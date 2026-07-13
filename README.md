@@ -293,17 +293,15 @@ Requires [Python 3.10+](https://www.python.org/downloads/) with **"Add to
 PATH"** ticked. Then, in the project folder:
 
 ```
-   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-   │ .\setup.ps1  │────▶│ venv + deps  │────▶│  .\gui.bat   │────▶│ drop a file, │
-   │              │     │ auto-install │     │  opens app   │     │ hit Start    │
-   └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
-      one command         (outside any          the window          models fetch
-                          synced folder)          app                once, then
-                                                                    fully offline
+   ┌───────────────────┐     ┌───────────────────┐     ┌───────────────────┐     ┌───────────────────┐
+   │ scripts\setup.ps1 │──▶  │    venv + deps    │──▶  │  scripts\gui.bat  │──▶  │    drop a file    │
+   └───────────────────┘     └───────────────────┘     └───────────────────┘     └───────────────────┘
+         run once               auto-installed             opens the app             → transcribe
+                                (outside sync)              the window                 hit Start
 ```
 
 ```powershell
-.\setup.ps1
+.\scripts\setup.ps1
 ```
 
 That's it. Speech models download automatically on first use
@@ -311,7 +309,7 @@ That's it. Speech models download automatically on first use
 everything runs with **zero internet**. To hard-guarantee offline mode:
 `$env:HF_HUB_OFFLINE = "1"`.
 
-> 💡 If the project folder is inside **Dropbox/OneDrive**, `setup.ps1`
+> 💡 If the project folder is inside **Dropbox/OneDrive**, `scripts\setup.ps1`
 > automatically puts the environment *outside* the synced folder — sync
 > tools lock files mid-install and break pip.
 
@@ -323,25 +321,28 @@ everything runs with **zero internet**. To hard-guarantee offline mode:
 
 | Launcher | What it does |
 |----------|--------------|
-| `gui.bat` | The window app — files, live mic/call, speaker naming, everything |
-| `transcribe.bat <files>` | Command-line transcription (`--speakers --cloud --docx …`) |
-| `live.bat` | Live transcription: `--source mic` / `call` / `both` |
-| `watch.bat <folder>` | Auto-transcribe new files appearing in a folder |
-| `summarize.bat <txt>` | Meeting notes + action items from a transcript |
-| `search.bat "text" [folder]` | Search across all transcripts |
-| `indic.bat <files> --language hi` | AI4Bharat IndicConformer engine |
-| `install_context_menu.ps1` | Add right-click → "Transcribe (offline)" |
-| `build_exe.ps1` | Build a standalone `.exe` to share with teammates |
+| `scripts\gui.bat` | The window app — files, live mic/call, speaker naming, everything |
+| `scripts\transcribe.bat <files>` | Command-line transcription (`--speakers --cloud --docx …`) |
+| `scripts\live.bat` | Live transcription: `--source mic` / `call` / `both` |
+| `scripts\watch.bat <folder>` | Auto-transcribe new files appearing in a folder |
+| `scripts\summarize.bat <txt>` | Meeting notes + action items from a transcript |
+| `scripts\search.bat "text" [folder]` | Search across all transcripts |
+| `scripts\indic.bat <files> --language hi` | AI4Bharat IndicConformer engine |
+| `scripts\install_context_menu.ps1` | Add right-click → "Transcribe (offline)" |
+| `scripts\build_exe.ps1` | Build a standalone `.exe` to share with teammates |
+
+> Or, after `pip install -e .`, use the console commands directly:
+> `transcribe`, `transcribe-gui`, `transcribe-live`, `transcribe-watch`, … .
 
 **Examples:**
 
 ```powershell
-.\transcribe.bat meeting.mp4 --speakers --srt     # who-said-what + subtitles
-.\transcribe.bat "C:\recordings" --model large-v3 # whole folder, best accuracy
-.\transcribe.bat tamil.m4a --translate            # Tamil speech → English text
-.\live.bat --language hi                           # live Hindi dictation
-.\watch.bat "C:\Users\me\Downloads" --speakers     # auto-transcribe new files
-.\summarize.bat "meeting.txt" --language Hindi     # notes written in Hindi
+.\scripts\transcribe.bat meeting.mp4 --speakers --srt      # who-said-what + subtitles
+.\scripts\transcribe.bat "C:\recordings" --model large-v3  # whole folder, best accuracy
+.\scripts\transcribe.bat tamil.m4a --translate             # Tamil speech → English text
+.\scripts\live.bat --language hi                           # live Hindi dictation
+.\scripts\watch.bat "C:\Users\me\Downloads" --speakers     # auto-transcribe new files
+.\scripts\summarize.bat "meeting.txt" --language Hindi     # notes in Hindi
 ```
 
 > Add `--help` to any command to see every flag.
@@ -388,7 +389,7 @@ One transcription, many share-ready files — pick any combination.
 ```
                   ┌──────────────────┐
                   │  one transcript  │
-                  └─────────┴─────────┘
+                  └─────────┴────────┘
                             │
         ┌────────┬──────────┼─────────┬───────────┐
         ▼        ▼          ▼         ▼           ▼
@@ -419,7 +420,7 @@ One transcription, many share-ready files — pick any combination.
  └───────────────────────────────┘   └───────────────────────────────┘
 ```
 
-The IndicConformer model is **gated** on Hugging Face: run `indic.bat`
+The IndicConformer model is **gated** on Hugging Face: run `scripts\indic.bat`
 once and follow the printed one-time unlock steps (free account + token).
 
 <br>
@@ -428,7 +429,7 @@ once and follow the printed one-time unlock steps (free account + token).
 
 With a Groq key present, notes (summary / key points / action items)
 generate in seconds — turn on **📝 Meeting notes** in the GUI or run
-`summarize.bat "meeting.txt"`. Without a key, it falls back to a local
+`scripts\summarize.bat "meeting.txt"`. Without a key, it falls back to a local
 [Ollama](https://ollama.com) model, **fully offline**.
 
 ```
@@ -446,21 +447,24 @@ generate in seconds — turn on **📝 Meeting notes** in the GUI or run
 
 ```
 offline-transcriber/
-├─ gui.py               Desktop app (CustomTkinter): files, live, speaker naming
-├─ transcribe.py        CLI + shared core pipeline
-├─ cloud.py             Groq Whisper cloud boost (optional, ~100×)
-├─ live.py              Live capture — mic / call / both
-├─ diarize.py           Speaker diarization (SpeechBrain ECAPA-TDNN)
-├─ voices.py            Named voice memory  →  speaker_profiles.json
-├─ notes.py             Meeting notes (Groq LLM → Ollama fallback)
-├─ summarize.py         Notes entry point
-├─ docx_export.py       Word (.docx) writer — bold speakers, timestamps
-├─ search.py            Search across transcripts
-├─ watch.py             Auto-transcribe a watched folder
-├─ transcribe_indic.py  AI4Bharat IndicConformer engine (gated)
-├─ vocabulary.txt       Your custom words / names / acronyms
-├─ build_exe.ps1        Package a standalone .exe (no Python on the target)
-└─ *.bat                One-click launchers (auto-find the venv)
+├─ transcriber/              The Python package
+│  ├─ transcribe.py          CLI + shared core pipeline
+│  ├─ gui.py                 Desktop app (CustomTkinter)
+│  ├─ cloud.py               Groq Whisper cloud boost (opt-in, off by default)
+│  ├─ policy.py              Offline-only data-egress gate
+│  ├─ live.py                Live capture — mic / call / both
+│  ├─ diarize.py             Speaker diarization (SpeechBrain ECAPA-TDNN)
+│  ├─ voices.py              Named voice memory → speaker_profiles.json
+│  ├─ notes.py, summarize.py Meeting notes (local Ollama, or Groq if enabled)
+│  ├─ watch.py, search.py, docx_export.py, transcribe_indic.py
+│  ├─ logging_setup.py       Rotating file log + GUI crash handler
+│  ├─ paths.py               Resolves the per-user data directory
+│  └─ data/vocabulary.txt    Default custom-terms template
+├─ scripts/                  Launchers: *.bat, setup.ps1, build_exe.ps1, …
+├─ tests/                    pytest suite (no model downloads)
+├─ .github/workflows/        CI — ruff + pytest on Linux/Windows
+├─ pyproject.toml            Packaging, dependencies, tool config
+└─ README.md  LICENSE  SECURITY.md  requirements.txt
 ```
 
 **A few good-to-knows**
@@ -468,7 +472,7 @@ offline-transcriber/
 - Transcripts are saved as **UTF-8** next to the input file.
 - Accepts wav, mp3, m4a, mp4, aac, flac, ogg, opus, webm, mkv, mov, 3gp
   and more — **no ffmpeg install needed**.
-- `build_exe.ps1` produces a ~2 GB folder; zip it to share. Speech models
+- `scripts\build_exe.ps1` produces a ~2 GB folder; zip it to share. Speech models
   still download on first use on the target machine (or copy
   `%USERPROFILE%\.cache\huggingface` across for full offline).
 

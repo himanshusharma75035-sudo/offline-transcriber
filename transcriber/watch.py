@@ -23,7 +23,7 @@ if sys.stdout:
 if sys.stderr:
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-from transcribe import AUDIO_EXTS, transcribe_file  # noqa: E402
+from .transcribe import AUDIO_EXTS, transcribe_file  # noqa: E402
 
 POLL_SECONDS = 5
 

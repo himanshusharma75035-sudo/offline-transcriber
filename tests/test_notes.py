@@ -5,7 +5,7 @@ import urllib.error
 
 import pytest
 
-import notes
+from transcriber import notes
 
 
 def test_empty_transcript_raises():
@@ -42,7 +42,7 @@ def test_chunked_multi_chunk_merges():
 
 
 def test_offline_skips_groq_and_uses_ollama(monkeypatch):
-    import policy
+    from transcriber import policy
     monkeypatch.setattr(policy, "cloud_allowed", lambda: False)
 
     def boom(*_a, **_k):
@@ -57,7 +57,7 @@ def test_offline_skips_groq_and_uses_ollama(monkeypatch):
 
 
 def test_offline_without_ollama_reports_ollama_not_groq(monkeypatch):
-    import policy
+    from transcriber import policy
     monkeypatch.setattr(policy, "cloud_allowed", lambda: False)
 
     def no_ollama(*_a, **_k):
@@ -71,7 +71,7 @@ def test_offline_without_ollama_reports_ollama_not_groq(monkeypatch):
 
 
 def test_cloud_enabled_uses_groq(monkeypatch):
-    import policy
+    from transcriber import policy
     monkeypatch.setattr(policy, "cloud_allowed", lambda: True)
     monkeypatch.setattr(notes, "get_api_key", lambda: "gsk_test")
     monkeypatch.setattr(notes, "_pick_groq_model", lambda key: "llama-3.3-70b")

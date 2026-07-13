@@ -20,10 +20,11 @@ import argparse
 import queue
 import sys
 from datetime import datetime
-from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
+
+from . import paths
 
 # Windows consoles often default to a legacy codepage that can't print
 # Indian scripts; force UTF-8 so Devanagari/Tamil/etc. don't crash output.
@@ -118,7 +119,7 @@ def main():
 
     from faster_whisper import WhisperModel
 
-    from transcribe import get_vocabulary
+    from .transcribe import get_vocabulary
     print(f"loading model '{args.model}' ...")
     model = WhisperModel(args.model, device="cpu", compute_type="int8")
 
@@ -169,7 +170,7 @@ def main():
         if not transcript:
             print("\nno speech captured.")
             return
-        out = Path(__file__).parent / (
+        out = paths.data_dir() / (
             "live_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".txt")
         out.write_text("\n".join(transcript) + "\n", encoding="utf-8")
         print(f"\nsaved session transcript: {out}")

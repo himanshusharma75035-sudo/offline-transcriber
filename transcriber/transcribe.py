@@ -18,8 +18,7 @@ import sys
 import time
 from pathlib import Path
 
-import logging_setup
-import policy
+from . import logging_setup, paths, policy
 
 log = logging.getLogger("transcriber")
 
@@ -39,7 +38,7 @@ def get_vocabulary():
     """Domain terms from vocabulary.txt, hinted to the engines so company
     jargon and names get spelled correctly. Returns None if the file is
     missing or empty."""
-    vocab_file = Path(__file__).parent / "vocabulary.txt"
+    vocab_file = paths.vocabulary_file()
     if not vocab_file.is_file():
         return None
     terms = [line.strip() for line in
@@ -78,7 +77,7 @@ def transcribe_file(get_model, audio_path: Path, args):
     want_speakers = args.speakers or args.num_speakers
     segments = None
     if args.cloud:
-        import cloud
+        from . import cloud
         try:
             segments, info = cloud.transcribe(
                 audio_path, language=args.language,
@@ -126,8 +125,8 @@ def transcribe_file(get_model, audio_path: Path, args):
     if want_speakers:
         from faster_whisper.audio import decode_audio
 
-        from diarize import diarize_words
-        from voices import display_name, match_speakers
+        from .diarize import diarize_words
+        from .voices import display_name, match_speakers
         print("labelling speakers...")
         words = [(w.start, w.end, w.word)
                  for s in seg_list for w in (s.words or [])]
@@ -164,7 +163,7 @@ def transcribe_file(get_model, audio_path: Path, args):
         written.append(srt_path)
 
     if getattr(args, "docx", False):
-        from docx_export import write_docx
+        from .docx_export import write_docx
         written.append(write_docx(stem.with_suffix(".docx"),
                                   audio_path.stem, lines))
 
@@ -188,6 +187,7 @@ def transcribe_file(get_model, audio_path: Path, args):
 def main():
     logging_setup.setup()
     parser = argparse.ArgumentParser(
+        prog="transcribe",
         description="Offline transcription for Indian languages + English.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("inputs", nargs="+",

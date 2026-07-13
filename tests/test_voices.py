@@ -4,7 +4,7 @@ cover for the atomic-save / backup-recovery / corrupt-file bugs."""
 import numpy as np
 import pytest
 
-import voices
+from transcriber import voices
 
 
 @pytest.fixture
