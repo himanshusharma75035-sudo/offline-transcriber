@@ -46,6 +46,8 @@ indic = ["transformers>=4.40"]
 docx = ["python-docx>=1.1"]
 # developer tooling
 dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.8"]
+# standalone .exe build (scripts/build_exe.ps1)
+build = ["pyinstaller>=6"]
 
 [project.urls]
 Homepage = "https://github.com/himanshusharma75035-sudo/offline-transcriber"

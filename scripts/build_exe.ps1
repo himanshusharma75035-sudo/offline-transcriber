@@ -21,8 +21,13 @@ if (-not (Test-Path (Join-Path $venv "python.exe"))) {
 }
 $work = Join-Path $env:LOCALAPPDATA "OfflineTranscriber-build"
 $vocab = Join-Path $root "transcriber\data\vocabulary.txt"
+$python = Join-Path $venv "python.exe"
 
-& (Join-Path $venv "pyinstaller.exe") `
+# PyInstaller is a build-only tool (not a runtime dependency); make sure the
+# venv has it before building.
+& $python -m pip install --quiet --disable-pip-version-check pyinstaller
+
+& $python -m PyInstaller `
     --noconfirm --clean --windowed `
     --name OfflineTranscriber `
     --workpath (Join-Path $work "build") `
