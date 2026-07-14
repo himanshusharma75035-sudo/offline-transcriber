@@ -89,7 +89,7 @@ The key is **never written to logs or error messages**. `groq_api_key.txt` is
 ## Reporting a vulnerability
 
 Please **do not** open a public issue for security problems. Email
-**himanshu.sharma@eko.co.in** with:
+**himanshusharma75035@gmail.com** with:
 
 - a description and impact,
 - steps to reproduce (a proof-of-concept if possible),

@@ -9,7 +9,7 @@ description = "Offline-first transcription for every Indian language + English: 
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
-authors = [{ name = "Himanshu Sharma", email = "himanshu.sharma@eko.co.in" }]
+authors = [{ name = "Himanshu Sharma", email = "himanshusharma75035@gmail.com" }]
 keywords = ["transcription", "whisper", "speech-to-text", "diarization",
             "offline", "indian-languages", "hindi", "subtitles"]
 classifiers = [
