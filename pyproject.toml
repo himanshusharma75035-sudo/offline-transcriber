@@ -101,6 +101,7 @@ files = [
     "transcriber/logging_setup.py",
     "transcriber/search.py",
     "transcriber/docx_export.py",
+    "transcriber/metrics.py",
 ]
 
 # numpy ships stubs that use 3.12-only `type` syntax; don't follow them under a
