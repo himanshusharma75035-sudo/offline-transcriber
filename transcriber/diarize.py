@@ -120,7 +120,7 @@ def build_timeline(audio: np.ndarray, num_speakers=None):
         if raw[i - 1] == raw[i + 1] != raw[i]:
             raw[i] = raw[i - 1]
 
-    order = {}
+    order: dict[int, int] = {}
     for lab in raw:
         if lab not in order:
             order[lab] = len(order) + 1
@@ -146,7 +146,7 @@ def diarize_words(audio: np.ndarray, words, num_speakers=None):
     def speaker_at(t):
         return labels[int(np.abs(times_arr - t).argmin())]
 
-    turns = []
+    turns: list[tuple[int, float, float, str]] = []
     for start, end, text in words:
         spk = speaker_at((start + end) / 2)
         if turns and turns[-1][0] == spk:

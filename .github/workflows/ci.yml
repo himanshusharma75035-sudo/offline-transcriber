@@ -25,6 +25,19 @@ jobs:
       - run: pip install ruff
       - run: ruff check .
 
+  types:
+    name: Types (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # mypy gates the core-logic modules only (configured in pyproject.toml);
+      # numpy is skipped there, but installed so its import resolves cleanly.
+      - run: pip install mypy numpy
+      - run: mypy
+
   test:
     name: Tests (${{ matrix.os }} / py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}

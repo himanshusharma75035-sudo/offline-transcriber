@@ -87,3 +87,25 @@ addopts = "-q"
 python_version = "3.10"
 ignore_missing_imports = true
 warn_unused_ignores = false
+# CI enforces mypy on the core logic only (see [tool.mypy] files below). The GUI
+# and live-audio modules lean on heavily-untyped third-party toolkits, so gating
+# on them would be noise, not signal.
+files = [
+    "transcriber/policy.py",
+    "transcriber/paths.py",
+    "transcriber/cloud.py",
+    "transcriber/notes.py",
+    "transcriber/summarize.py",
+    "transcriber/diarize.py",
+    "transcriber/voices.py",
+    "transcriber/logging_setup.py",
+    "transcriber/search.py",
+    "transcriber/docx_export.py",
+]
+
+# numpy ships stubs that use 3.12-only `type` syntax; don't follow them under a
+# 3.10 target. ignore_missing_imports already covers the untyped ML/UI deps.
+[[tool.mypy.overrides]]
+module = "numpy.*"
+follow_imports = "skip"
+follow_imports_for_stubs = true

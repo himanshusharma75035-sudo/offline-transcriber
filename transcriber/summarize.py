@@ -16,10 +16,10 @@ from pathlib import Path
 # Windows consoles often default to a legacy codepage that can't print
 # Indian scripts; force UTF-8 so Devanagari/Tamil/etc. don't crash output.
 # (Under pythonw there is no console, so the streams are None.)
-if sys.stdout:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-if sys.stderr:
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+for _stream in (sys.stdout, sys.stderr):
+    _reconfigure = getattr(_stream, "reconfigure", None)
+    if _reconfigure:
+        _reconfigure(encoding="utf-8", errors="replace")
 
 from .notes import NotesUnavailable, generate_notes  # noqa: E402
 
