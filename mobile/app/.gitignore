@@ -73,3 +73,7 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# large bundled ML assets (downloaded during CI, not committed)
+assets/*.bin
+assets/*.wav

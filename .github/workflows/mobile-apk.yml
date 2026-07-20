@@ -47,12 +47,26 @@ jobs:
       - name: Install JS dependencies
         run: npm install
 
+      - name: Download bundled model + sample (offline assets)
+        run: |
+          mkdir -p assets
+          echo "Downloading ggml-tiny model (~75 MB)..."
+          curl -fL --retry 3 -o assets/ggml-tiny.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
+          echo "Downloading sample clip..."
+          curl -fL --retry 3 -o assets/jfk.wav \
+            https://github.com/ggerganov/whisper.cpp/raw/master/samples/jfk.wav
+          ls -lh assets
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Build debug APK
+      # Release build embeds the JS bundle + assets, so the APK runs standalone
+      # on a phone (a debug APK needs the Metro dev server). It's signed with the
+      # template debug keystore — fine for sideloading, not for the Play Store.
+      - name: Build release APK
         working-directory: mobile/app/android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Locate APK
         id: apk
@@ -65,7 +79,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OfflineTranscriber-android-debug
+          name: OfflineTranscriber-android
           path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
 

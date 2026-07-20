@@ -6,6 +6,15 @@ const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
  *
  * @type {import('@react-native/metro-config').MetroConfig}
  */
-const config = {};
+const defaultConfig = getDefaultConfig(__dirname);
 
-module.exports = mergeConfig(getDefaultConfig(__dirname), config);
+const config = {
+  resolver: {
+    // GGML Whisper models ship as .bin; let Metro bundle them as assets so
+    // `require('./assets/ggml-tiny.bin')` resolves. (.wav is already a default
+    // asset extension.)
+    assetExts: [...defaultConfig.resolver.assetExts, 'bin'],
+  },
+};
+
+module.exports = mergeConfig(defaultConfig, config);
