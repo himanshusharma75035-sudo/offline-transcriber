@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/latest-v0.1.0-1f6feb?style=for-the-badge)
+![Version](https://img.shields.io/badge/latest-v0.2.0-1f6feb?style=for-the-badge)
 ![Release](https://img.shields.io/badge/status-first%20public%20release-2ea44f?style=for-the-badge)
 ![Offline](https://img.shields.io/badge/100%25-OFFLINE-8957e5?style=for-the-badge)
 
@@ -28,17 +28,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## 🗺️ Release timeline
 
 ```
-  past commits          ●  v0.1.0  (you are here)          the road ahead
+  v0.1.0                 ●  v0.2.0  (you are here)          the road ahead
   ───────────────────────┼──────────────────────────────────────────────▶
-   package · offline      first tagged &                 code-signing ·
-   gate · tests · CI      downloadable release            benchmarks · v1.0
+   first public          benchmarks · key mgr ·          a signed build ·
+   release               code-sign tooling · mypy         v1.0
 ```
 
-<a id="unreleased"></a>
+<a id="0-2-0"></a>
 
-## [Unreleased]
+## [0.2.0] — 2026-07-20 · benchmarks, key manager & signing tooling
 
-Post-release hardening — no breaking changes.
+Post-release hardening — no breaking changes. The app itself (GUI/CLI
+transcription) is unchanged; this release adds evaluation, security, and
+build tooling around it.
 
 ### ✨ Added
 

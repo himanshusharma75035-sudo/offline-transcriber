@@ -6,4 +6,4 @@ Importing this package is cheap: heavy dependencies (torch, faster-whisper,
 speechbrain) are imported lazily inside the functions that need them.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
