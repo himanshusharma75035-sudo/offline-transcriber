@@ -181,47 +181,52 @@ That's a working transcriber. **Everything after this is product work, not ML wo
 The stuff no tutorial mentions. Each of these cost hours or days.
 
 ```
-┌────────────────────────────────────────────────────────────────────────────┐
-│   HARD-WON LESSONS                                                         │
-├────────────────────────────────────────────────────────────────────────────┤
-│                                                                            │
-│    1  Cloud-synced folders break virtualenvs.                              │
-│       A sync client (Dropbox/OneDrive/Drive) will fight pip over open      │
-│       files and half-sync your site-packages. Put the venv OUTSIDE the     │
-│       synced tree. Symptom: bizarre, unreproducible install failures.      │
-│                                                                            │
-│    2  An allocation error is usually not your code.                        │
-│       'failed to allocate memory' from a math library means the OS said    │
-│       no. On Windows check the COMMIT CHARGE, not free RAM - a leaked      │
-│       process can hold commit while its working set looks tiny.            │
-│                                                                            │
-│    3  Windowed builds have no stdout.                                      │
-│       In a --windowed freeze, sys.stdout/stderr are None. Any bare         │
-│       print() or stream call crashes at startup with no visible error.     │
-│       Guard them, and install a crash handler that shows a dialog.         │
-│                                                                            │
-│    4  Freezing needs to be told about your own package.                    │
-│       Dynamic imports are invisible to the analyzer. You must pass the     │
-│       search path and explicitly collect your submodules and data files.   │
-│                                                                            │
-│    5  Don't exclude a dependency's dependency.                             │
-│       Trimming a 'unused' audio lib silently broke speaker labels: the     │
-│       diarization library imported it at load time. Test the frozen        │
-│       build, not just the source.                                          │
-│                                                                            │
-│    6  Launchers must not cd.                                               │
-│       If your .bat changes directory, relative file arguments the user     │
-│       typed stop resolving. Set the module search path instead.            │
-│                                                                            │
-│    7  Some models are gated.                                               │
-│       A few pretrained weights need an account + token before download.    │
-│       Fail with an instruction, not a stack trace.                         │
-│                                                                            │
-│    8  Wide glyphs wreck ASCII diagrams.                                    │
-│       Emoji and CJK are double-width. Inside a code block they shift       │
-│       every border. Keep diagrams to single-width characters.              │
-│                                                                            │
-└────────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│  HARD-WON LESSONS                                                         │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│    1  Cloud-synced folders break virtualenvs.                             │
+│       A sync client (Dropbox/OneDrive/Drive) will fight pip over open     │
+│       files and half-sync your site-packages. Put the venv OUTSIDE the    │
+│       synced tree. Symptom: bizarre, unreproducible install failures.     │
+│                                                                           │
+│    2  An allocation error is usually not your code.                       │
+│       'failed to allocate memory' from a math library means the OS said   │
+│       no. On Windows check the COMMIT CHARGE, not free RAM - a leaked     │
+│       process can hold commit while its working set looks tiny.           │
+│                                                                           │
+│    3  Windowed builds have no stdout.                                     │
+│       In a --windowed freeze, sys.stdout/stderr are None. Any bare        │
+│       print() or stream call crashes at startup with no visible error.    │
+│       Guard them, and install a crash handler that shows a dialog.        │
+│                                                                           │
+│    4  Freezing needs to be told about your own package.                   │
+│       Dynamic imports are invisible to the analyzer. You must pass the    │
+│       search path and explicitly collect your submodules and data files.  │
+│                                                                           │
+│    5  Don't exclude a dependency's dependency.                            │
+│       Trimming a 'unused' audio lib silently broke speaker labels: the    │
+│       diarization library imported it at load time. Test the frozen       │
+│       build, not just the source.                                         │
+│                                                                           │
+│    6  Launchers must not cd.                                              │
+│       If your .bat changes directory, relative file arguments the user    │
+│       typed stop resolving. Set the module search path instead.           │
+│                                                                           │
+│    7  Some models are gated.                                              │
+│       A few pretrained weights need an account + token before download.   │
+│       Fail with an instruction, not a stack trace.                        │
+│                                                                           │
+│    8  Wide glyphs wreck ASCII diagrams.                                   │
+│       Emoji and CJK are double-width. Inside a code block they shift      │
+│       every border. Keep diagrams to single-width characters.             │
+│                                                                           │
+│    9  Windows PowerShell 5.1 reads .ps1 as ANSI, not UTF-8.               │
+│       A non-ASCII char in a double-quoted string (a stray em-dash) can    │
+│       mangle into bytes containing a quote and break parsing. Keep        │
+│       .ps1 scripts pure ASCII, or save them UTF-8 with a BOM.             │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 <a id="ladder"></a>

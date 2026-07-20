@@ -34,6 +34,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
    gate · tests · CI      downloadable release            benchmarks · v1.0
 ```
 
+<a id="unreleased"></a>
+
+## [Unreleased]
+
+Post-release hardening — no breaking changes.
+
+### ✨ Added
+
+- **`transcribe-key`** — a secure Groq API-key manager: store the key in the OS
+  keyring, check where it resolves from, migrate a plaintext `groq_api_key.txt`
+  into the keyring (and delete it), or clear it. The key value is never printed.
+- **Accuracy benchmarking** — a dependency-free WER/DER metrics module
+  (`transcriber/metrics.py`), a harness (`scripts/benchmark.py`) that scores
+  Whisper + the diarizer against a labeled manifest, and
+  [`docs/benchmarks.md`](docs/benchmarks.md) explaining the method.
+- **Code-signing tooling** — `scripts/sign_exe.ps1` (signtool wrapper: SHA-256 +
+  RFC-3161 timestamp, `.pfx` / store-cert / self-signed) and
+  [`docs/code-signing.md`](docs/code-signing.md).
+
+### 🔧 Changed
+
+- **CI now enforces `mypy`** on the core-logic modules, alongside ruff and the
+  test suite.
+
 <a id="0-1-0"></a>
 
 ## [0.1.0] — 2026-07-15 · first public release
