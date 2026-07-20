@@ -27,3 +27,11 @@ dist/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# mobile app: the generated React Native project's deps/build (the app/ source
+# will be committed once initialized; these never are)
+mobile/app/node_modules/
+mobile/app/android/.gradle/
+mobile/app/android/app/build/
+mobile/app/ios/Pods/
+mobile/**/*.keystore
