@@ -77,6 +77,24 @@ The key is read in order of decreasing security:
 The key is **never written to logs or error messages**. `groq_api_key.txt` is
 `.gitignore`d. Prefer the environment variable or `keyring`.
 
+**Manage the key** with the built-in helper (never prints the secret):
+
+```
+transcribe-key --status     # where does the key resolve from?
+transcribe-key --set        # paste a key, store it in the OS keyring
+transcribe-key --migrate    # move groq_api_key.txt into the keyring + delete it
+transcribe-key --clear      # remove the key from the keyring
+```
+
+**Rotating the key** (do this if it may have been exposed — e.g. it sat in a
+synced folder):
+
+1. Create a **new** key at <https://console.groq.com/keys>.
+2. **Revoke the old** key on that same page — this is what actually invalidates
+   a leaked key; deleting local copies does not.
+3. Store the new one: `transcribe-key --set` (or `--migrate` to also delete any
+   leftover `groq_api_key.txt`).
+
 ## Supply chain & builds
 
 - Dependencies are declared in [`pyproject.toml`](pyproject.toml) and pinned in

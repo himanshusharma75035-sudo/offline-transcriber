@@ -62,6 +62,7 @@ transcribe-watch = "transcriber.watch:main"
 transcribe-notes = "transcriber.summarize:main"
 transcribe-search = "transcriber.search:main"
 transcribe-indic = "transcriber.transcribe_indic:main"
+transcribe-key = "transcriber.setup_key:main"
 
 [tool.setuptools]
 packages = ["transcriber"]
@@ -102,6 +103,7 @@ files = [
     "transcriber/search.py",
     "transcriber/docx_export.py",
     "transcriber/metrics.py",
+    "transcriber/setup_key.py",
 ]
 
 # numpy ships stubs that use 3.12-only `type` syntax; don't follow them under a

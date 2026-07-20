@@ -105,8 +105,11 @@ def get_api_key():
 SETUP_HELP = """cloud mode needs a free Groq API key (one-time, ~2 minutes):
   1. create a free account at https://console.groq.com
   2. create a key at https://console.groq.com/keys
-  3. paste it into a file named groq_api_key.txt next to the scripts,
-     or set the GROQ_API_KEY environment variable"""
+  3. store it securely:  transcribe-key --set   (saves it to the OS keyring)
+     or set the GROQ_API_KEY environment variable.
+  A plaintext groq_api_key.txt still works but is least secure — avoid it in
+  synced folders (Dropbox/OneDrive). Move an existing one with:
+     transcribe-key --migrate"""
 
 
 def _split_points(audio):
