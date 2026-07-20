@@ -185,12 +185,28 @@ def main():
             s.start()
         # timeout so Ctrl+C is honoured promptly and, if every stream dies
         # silently (device unplugged, endpoint change), we don't hang forever
+        # If transcription ever runs slower than real time (a heavy model on a
+        # busy CPU), the mic keeps filling the queue. Cap the backlog so latency
+        # can't run away: when too far behind, drop the oldest queued audio.
+        max_backlog = int(20.0 / BLOCK_SECONDS)
         while any(s.active for s in streams):
             try:
                 tag, block = audio_q.get(timeout=0.3)
             except queue.Empty:
                 continue
             feed(tag, block)
+            if audio_q.qsize() > max_backlog:
+                dropped = 0
+                while audio_q.qsize() > max_backlog // 4:
+                    try:
+                        audio_q.get_nowait()
+                        dropped += 1
+                    except queue.Empty:
+                        break
+                if dropped:
+                    print(f"live fell behind — skipped {dropped * BLOCK_SECONDS:.0f}s "
+                          f"to stay live (use a smaller --model if this repeats).",
+                          file=sys.stderr)
         else:
             print("\naudio device stopped; saving what was captured.",
                   file=sys.stderr)

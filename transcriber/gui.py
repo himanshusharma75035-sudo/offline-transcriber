@@ -471,8 +471,21 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
             from .live import find_loopback_device
 
+            # Live must keep up with real time. medium/large-v3 run far slower
+            # than real time on CPU, so the audio backlog grows without bound
+            # (minutes, then tens of minutes behind). Cap live at a fast model;
+            # the user's model choice still applies to file transcription.
+            FAST_LIVE = {"tiny", "base", "small"}
+            live_model = a["model"] if a["model"] in FAST_LIVE else "small"
+            if live_model != a["model"]:
+                self.msg_queue.put((
+                    "status",
+                    f"Live uses '{live_model}' for real-time speed — "
+                    f"'{a['model']}' still applies to file transcription."))
+                self._log(f"live: '{a['model']}' is too slow for real-time on "
+                          f"CPU; using '{live_model}' so it keeps up.")
             # short utterances gain nothing from batching: use the raw model
-            whisper = self._get_model(a["model"]).model
+            whisper = self._get_model(live_model).model
 
             rate, block = 16000, 0.25
             silence_rms, end_silence = 0.01, 0.8
@@ -544,12 +557,28 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                        for tag, dev in sources]
             for s in streams:
                 s.start()
+            # If a flush ever runs slower than real time, the mic keeps filling
+            # the queue. Cap the backlog so latency can't run away: when we fall
+            # too far behind, drop the oldest queued audio to catch back up.
+            max_backlog = int(20.0 / block)     # ~20 s of 0.25 s blocks
             while not stop.is_set():
                 try:
                     tag, chunk = audio_q.get(timeout=0.3)
                 except queue.Empty:
                     continue
                 feed(tag, chunk)
+                if audio_q.qsize() > max_backlog:
+                    dropped = 0
+                    while audio_q.qsize() > max_backlog // 4:
+                        try:
+                            audio_q.get_nowait()
+                            dropped += 1
+                        except queue.Empty:
+                            break
+                    if dropped:
+                        self._log(f"⚠ live fell behind — skipped "
+                                  f"{dropped * block:.0f}s to stay live "
+                                  f"(pick a faster model if this repeats).")
             for s in streams:
                 s.stop()
             # drain whatever was captured while the last flush was running,
