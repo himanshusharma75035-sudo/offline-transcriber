@@ -82,10 +82,27 @@ any future cloud path must be **opt-in only**, checked in one `policy.ts`
 module — mirroring [`transcriber/policy.py`](../transcriber/policy.py). No audio
 leaves the phone by default.
 
+## Building the APK (no local toolchain needed)
+
+The real React Native project now lives in [`app/`](app/) (RN 0.86). Because
+this machine has no Android toolchain, the **APK is built in GitHub Actions**
+([`.github/workflows/mobile-apk.yml`](../.github/workflows/mobile-apk.yml)) on
+the `mobile-app` branch — the runner has the Android SDK. Each build uploads the
+`.apk` as a downloadable artifact; on a tagged release it's attached to the
+release so you can install it on a phone directly.
+
+To build locally instead (once you have Node 22+, JDK 17, Android SDK):
+
+```bash
+cd mobile/app
+npm install
+cd android && ./gradlew assembleDebug
+# APK at: android/app/build/outputs/apk/debug/app-debug.apk
+```
+
 ## Status
 
 - [x] Architecture + roadmap ([`docs/mobile-plan.md`](../docs/mobile-plan.md))
-- [x] Scaffold plan + reference snippets (this file)
-- [ ] P0 — toolchain installed, project initialized, hello-world on a device
-- [ ] P1 — file → on-device transcription → export (MVP)
+- [x] **P0 — project initialized (RN 0.86) + CI that builds an APK** *(in progress: getting CI green)*
+- [ ] P1 — file → on-device transcription (whisper.rn) → export (MVP)
 - [ ] P2+ — live capture, model manager, diarization, notes (see roadmap)
