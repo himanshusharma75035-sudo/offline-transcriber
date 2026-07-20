@@ -83,8 +83,11 @@ The key is **never written to logs or error messages**. `groq_api_key.txt` is
   [`requirements.txt`](requirements.txt) for reproducible installs.
 - Releases are built in CI; verify the checksum published with each release.
 - The standalone `.exe` is currently **unsigned** — Windows SmartScreen will
-  warn "unknown publisher". Code-signing is on the roadmap; until then, verify
-  the download against the release checksum.
+  warn "unknown publisher". Signing tooling is in place
+  ([`scripts/sign_exe.ps1`](scripts/sign_exe.ps1), see
+  [docs/code-signing.md](docs/code-signing.md)); it just needs a purchased
+  code-signing certificate. Until a signed build ships, verify the download
+  against the release checksum.
 
 ## Reporting a vulnerability
 

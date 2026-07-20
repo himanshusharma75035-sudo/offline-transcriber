@@ -63,7 +63,7 @@ models.
 | [🚀 Setup](#setup) | [📟 Usage](#usage) | [🎚️ Choosing a model](#model) |
 | [📤 Output formats](#outputs) | [🧩 Project layout](#layout) | [📜 License & credits](#license) |
 | [🧠 Skills & blueprint](SKILLS.md) | [📓 Changelog](CHANGELOG.md) | [🔒 Security](SECURITY.md) |
-| [📈 Accuracy benchmarks](docs/benchmarks.md) | | |
+| [📈 Accuracy benchmarks](docs/benchmarks.md) | [🔏 Code-signing](docs/code-signing.md) | |
 
 <br>
 
